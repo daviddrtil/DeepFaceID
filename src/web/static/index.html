@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepFaceID</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <!-- Start Screen -->
+    <div id="start-screen" class="screen active">
+        <div class="content">
+            <h1>DeepFaceID</h1>
+            <p>Face Liveness Verification</p>
+            <button id="start-btn" class="btn-primary">Start Verification</button>
+            <p id="permission-error" class="error hidden"></p>
+        </div>
+    </div>
+
+    <!-- Main Screen -->
+    <div id="main-screen" class="screen">
+        <div class="video-container">
+            <video id="webcam" autoplay playsinline muted></video>
+            <canvas id="overlay"></canvas>
+        </div>
+        <div id="prompt-container">
+            <div id="action-prompt"></div>
+            <div id="progress-bar">
+                <div id="progress-fill"></div>
+            </div>
+            <div id="status-text"></div>
+        </div>
+        <button id="reset-btn" class="btn-secondary">Reset</button>
+    </div>
+
+    <!-- Completion Screen -->
+    <div id="completion-screen" class="screen">
+        <div class="content">
+            <div id="final-status"></div>
+            <p id="final-message"></p>
+            <button id="try-again-btn" class="btn-primary">Try Again</button>
+        </div>
+    </div>
+
+    <audio id="success-sound" src="/sounds/possitive_sound.wav" preload="auto"></audio>
+    <audio id="fail-sound" src="/sounds/negative_sound.wav" preload="auto"></audio>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
