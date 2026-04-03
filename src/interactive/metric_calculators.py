@@ -12,7 +12,6 @@ class MetricCalculators:
     SMILE_SCORE = 0.4
     JAW_OPEN_FOR_SMILE_WITH_TEETH = 0.1
     OPEN_MOUTH_SCORE = 0.4
-    TONGUE_OUT_SCORE = 0.5
 
     OCCLUSION_RATIO_THRESHOLD = 0.6     # 60 percentage of face region
     HAND_OVERLAP_THRESHOLD = 0.01
@@ -207,8 +206,5 @@ class MetricCalculators:
 
         if jaw_open > self.OPEN_MOUTH_SCORE:
             expr.append(ActionType.OPEN_MOUTH)
-
-        if scores.get("tongueOut", 0) > self.TONGUE_OUT_SCORE:
-            expr.append(ActionType.TONGUE_OUT)
 
         return expr

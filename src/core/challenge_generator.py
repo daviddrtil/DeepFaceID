@@ -3,7 +3,7 @@ from interactive.action_enum import ActionType
 
 
 class ChallengeGenerator:
-    def __init__(self, actions_count=3):
+    def __init__(self, actions_count=5):
         self.actions = random.sample(list(ActionType), actions_count)
         random.shuffle(self.actions)
         self.current_index = 0

@@ -21,4 +21,3 @@ class ActionType(Enum):
     SMILE = auto()
     SMILE_WITH_TEETH = auto()
     OPEN_MOUTH = auto()
-    #TONGUE_OUT = auto()    # TODO: fix detection
