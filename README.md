@@ -1,7 +1,20 @@
-# FaceID
+# DeepFaceID
 [Thesis] Detection of Facial Deepfakes Using Occlusion and Head Rotation in Remote Identity Verification  
 
-### Setup commands:
+
+### Hardware requirements:
+
+GPU: RTX 5060 or equivalent
+
+CPU: AMD Ryzen 7 AI 350 or equivalent
+
+
+### Installation:
+
+Install FFMPEG, which is used as a subprocess to 
+
+Install miniconda and add to system variables so its usable
+
 
 #### Powershell:
 
