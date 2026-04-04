@@ -30,21 +30,21 @@ class SpatialAnalyzer:
 
 class FrequencyAnalyzer:
     def run(self, passive_input):
-        fps = random.uniform(10, 20)
-        time.sleep(1.0 / fps)
+        # fps = random.uniform(10, 20)
+        # time.sleep(1.0 / fps)
         return random.uniform(0.4, 0.6)
 
 
 class TemporalAnalyzer:
     def run(self, passive_input):
-        fps = random.uniform(5, 10)
-        time.sleep(1.0 / fps)
+        # fps = random.uniform(5, 10)
+        # time.sleep(1.0 / fps)
         return random.uniform(0.4, 0.6)
 
 
 class PassiveRunner:
     def __init__(self):
-        self.spatial_worker = AnalyzerWorker(SpatialAnalyzer(), queue_size=2)
+        self.spatial_worker = AnalyzerWorker(SpatialAnalyzer(), queue_size=4)
         self.frequency_worker = AnalyzerWorker(FrequencyAnalyzer(), queue_size=4)
         self.temporal_worker = AnalyzerWorker(TemporalAnalyzer(), queue_size=16)
         self.score_aggregator = PassiveScoreAggregator()

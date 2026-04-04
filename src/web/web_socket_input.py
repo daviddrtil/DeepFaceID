@@ -12,7 +12,7 @@ class WebSocketInput(VideoInput):
         self.height = None
         self.fps = 30.0
         self.is_live = True
-        self.queue = LiveVideoQueue(maxsize=4)
+        self.queue = LiveVideoQueue(maxsize=6)
         self.frame_count = 0
         self.start_time = None
         self.connected = threading.Event()
