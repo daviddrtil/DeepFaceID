@@ -16,7 +16,7 @@ class LogFilter:
 
     @staticmethod
     def configure_native_logging():
-        # Must run before importing modules that initialize MediaPipe/TFLite runtimes.
+        # Must run before importing modules that initialize MediaPipe/TFLite runtimes
         os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
         os.environ["GLOG_minloglevel"] = "2"
         os.environ["GLOG_logtostderr"] = "1"

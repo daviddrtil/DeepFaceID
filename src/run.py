@@ -9,13 +9,15 @@ from core.liveness_detection_engine import LivenessDetectionEngine
 from preprocessing.static_video_loader import StaticVideoLoader
 from preprocessing.video_writer import VideoWriter
 from utils.path_helper import PathHelper
-from web.web_server import WebServer, WebSocketInput, WebOutput
+from web.web_server import WebServer
+from web.web_socket_input import WebSocketInput
+from web.web_output import WebOutput
 
 
 if __name__ == "__main__":
     project_root = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description="Process video for face and hand actions.")
-    parser.add_argument("--input-video", type=str, nargs="?", default=project_root / "recordings" / "fake_facefusion_cover_eye.mp4", help="Path to the input video file.")
+    parser.add_argument("--input-video", type=str, nargs="?", default=project_root / "recordings" / "real_daviddrtil_cover_eye.mp4", help="Path to the input video file.")
     parser.add_argument("--output-dir", type=str, nargs="?", default=None, help="Path to the output directory. Default: outputs/YYYY-MM-DD_HH-MM-SS")
     parser.add_argument("--stats-filename", type=str, default="stats.txt", help="Filename for the output statistics text file.")
     parser.add_argument("--live", action="store_true", help="Run the web-based live verification instead of processing a static video.")

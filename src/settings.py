@@ -22,11 +22,10 @@ class PipelineConfig:
     web_host: str
     web_port: int
 
-    input_queue_size: int = 30
-
     base_frame_width: int = 1920
     base_frame_height: int = 1080
     base_video_fps: int = 30
+    input_queue_size: int = 30
 
 def initialize_config(args):
     global config

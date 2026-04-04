@@ -29,7 +29,7 @@ class VideoWriter:
         ]
         self.ffmpeg_process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
 
-        self.queue = Queue(maxsize=150)
+        self.queue = Queue(maxsize=300)
         self.stop_event = threading.Event()
         self.thread = threading.Thread(target=self._writer_thread)
         self.last_frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
