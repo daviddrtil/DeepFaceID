@@ -14,7 +14,7 @@ class FaceAligner:
         self.dst_pts = self._get_aligned_reference_points(self.output_size)
 
         base_output_dir = Path(settings.config.output_dir)
-        self._debug_output_dir = base_output_dir / "preprocessed"
+        self._debug_output_dir = base_output_dir / "preprocessed_faces"
         self._debug_output_dir.mkdir(parents=True, exist_ok=True)
         self._debug_face_index = 0
 
