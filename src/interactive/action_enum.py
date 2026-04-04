@@ -66,6 +66,8 @@ COMPLEX_ACTIONS = [
     ActionSet({OcclusionType.COVER_MOUTH, PoseType.MOVE_HEAD_LEFT}),
     ActionSet({OcclusionType.COVER_MOUTH, PoseType.MOVE_HEAD_RIGHT}),
     ActionSet({OcclusionType.COVER_MOUTH, OcclusionType.COVER_NOSE}),
+    ActionSet({OcclusionType.COVER_MOUTH, OcclusionType.COVER_LEFT_EYE}),
+    ActionSet({OcclusionType.COVER_MOUTH, OcclusionType.COVER_RIGHT_EYE}),
 ]
 
 
