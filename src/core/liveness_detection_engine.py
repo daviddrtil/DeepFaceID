@@ -1,5 +1,4 @@
 from collections import deque
-import threading
 import time
 import queue
 
@@ -8,6 +7,7 @@ from core.challenge_generator import ChallengeGenerator
 from core.challenge_timer import ChallengeTimer
 from core.decision_logic import DecisionLogic
 from core.feedback_overlay import FeedbackOverlay
+from interactive.action_enum import get_action_name
 from interactive.interactive_runner import InteractiveRunner
 from passive.passive_runner import PassiveRunner
 from preprocessing.preprocessor import Preprocessor
@@ -121,7 +121,7 @@ class LivenessDetectionEngine:
                 )
 
                 overlay = {
-                    'current_action': d_action.value if d_action is not None else 'Completed',
+                    'current_action': d_action,
                     'challenge_progress': d_interactive['challenge_progress'],
                     'challenge_completed': d_completed,
                     'challenge_total': d_total,
@@ -174,10 +174,10 @@ class LivenessDetectionEngine:
     def _send_web_overlay(self, interactive_data, action, decision, completed=0, total=0, overlay=None):
         if not self.web_output:
             return
-        
+
         result = {
             'type': 'result',
-            'action': action.value if action else None,
+            'action': get_action_name(action),
             'progress': interactive_data['challenge_progress'],
             'completed': completed,
             'total': total,

@@ -4,6 +4,7 @@ from mediapipe import solutions
 from mediapipe.framework.formats import landmark_pb2
 from PIL import Image, ImageDraw, ImageFont
 from interactive.metric_calculators import MetricCalculators
+from interactive.action_enum import get_action_name
 from passive import passive_runner
 import settings
 
@@ -153,8 +154,8 @@ class FeedbackOverlay:
             return current_y
 
         current_action = overlay.get("current_action")
-        if current_action:
-            action_name = current_action.value if hasattr(current_action, 'value') else current_action
+        action_name = get_action_name(current_action)
+        if action_name:
             progress = self._get_action_progress(overlay)
             current_y = self._draw_text_line(frame, f"Action: {action_name}" + progress, (255, 255, 255), current_y, align="right")
 
