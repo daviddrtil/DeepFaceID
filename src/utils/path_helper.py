@@ -1,6 +1,5 @@
 import os
 import re
-import platform
 from datetime import datetime
 from pathlib import Path
 
@@ -22,11 +21,6 @@ class PathHelper:
 
         next_version = max(numbers) + 1 if numbers else 1
         return Path(base_path) / f"{subdir_prefix}{next_version:02d}"
-
-    @staticmethod
-    def get_absolute_path(relative_path):
-        base = Path("C:/") if platform.system() == "Windows" else Path("/mnt/c")
-        return base / relative_path
 
     @staticmethod
     def get_output_video_path(args):

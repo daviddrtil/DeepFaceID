@@ -15,8 +15,7 @@ from web.web_server import WebServer, WebSocketInput, WebOutput
 if __name__ == "__main__":
     project_root = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description="Process video for face and hand actions.")
-    # parser.add_argument("--input_video", type=str, nargs="?", default=PathHelper.get_absolute_path("Users/daviddrtil/docs/school/ing/thesis/recordings/swaps/deepfacelive/Tom_Cruise/Tom_Cruise_cover_eye.mp4"), help="Path to the input video file.")  # TODO: only for testing
-    parser.add_argument("--input-video", type=str, nargs="?", default=PathHelper.get_absolute_path("Users/daviddrtil/docs/school/ing/thesis/recordings/targets/03_cover_eye.mp4"), help="Path to the input video file.")
+    parser.add_argument("--input-video", type=str, nargs="?", default=project_root / "recordings" / "fake_facefusion_cover_eye.mp4", help="Path to the input video file.")
     parser.add_argument("--output-dir", type=str, nargs="?", default=None, help="Path to the output directory. Default: outputs/YYYY-MM-DD_HH-MM-SS")
     parser.add_argument("--stats-filename", type=str, default="stats.txt", help="Filename for the output statistics text file.")
     parser.add_argument("--live", action="store_true", help="Run the web-based live verification instead of processing a static video.")
@@ -82,7 +81,7 @@ if __name__ == "__main__":
             )
             engine.run()
     except KeyboardInterrupt:
-        print("Keyboard interrupt: Shutting down...")
+        print("Keyboard interrupt: shutting down...")
     except Exception:
         traceback.print_exc()
     finally:
