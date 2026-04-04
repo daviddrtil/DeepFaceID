@@ -1,16 +1,9 @@
-from pathlib import Path
-import os
 import settings
 
 
 class StatisticsWriter:
-    def __init__(self, output_dir=None):
-        if output_dir:
-            filepath = Path(output_dir) / "stats.txt"
-        else:
-            filepath = settings.config.output_stats_path
-        os.makedirs(filepath.parent, exist_ok=True)
-        self.file = open(filepath, "w", encoding="utf-8")
+    def __init__(self):
+        self.file = open(settings.config.output_stats_path, "w", encoding="utf-8")
 
     @staticmethod
     def _to_action_text(values):

@@ -8,12 +8,12 @@ import settings
 
 
 class FaceAligner:
-    def __init__(self, output_size, keypoint_indices, output_dir=None):
+    def __init__(self, output_size, keypoint_indices):
         self.output_size = output_size
         self.keypoint_indices = keypoint_indices
         self.dst_pts = self._get_aligned_reference_points(self.output_size)
 
-        base_output_dir = Path(output_dir) if output_dir else Path(settings.config.output_dir)
+        base_output_dir = Path(settings.config.output_dir)
         self._debug_output_dir = base_output_dir / "preprocessed"
         self._debug_output_dir.mkdir(parents=True, exist_ok=True)
         self._debug_face_index = 0

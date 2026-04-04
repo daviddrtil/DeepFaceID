@@ -10,14 +10,14 @@ import numpy as np
 from pathlib import Path
 from aiohttp import web
 import settings
+from core.liveness_detection_engine import LivenessDetectionEngine
 
 
 class WebServer:
-    def __init__(self, stop_event, video_input, web_output, engine_factory):
+    def __init__(self, stop_event, video_input, web_output):
         self.stop_event = stop_event
         self.video_input = video_input
         self.web_output = web_output
-        self.engine_factory = engine_factory
         self.static_dir = Path(__file__).parent / "static"
         self.sounds_dir = Path(__file__).parent / "sounds"
 
@@ -38,11 +38,12 @@ class WebServer:
         return web.FileResponse(self.static_dir / 'index.html')
 
     async def _websocket_handler(self, request):
+        session_name = self._read_session_name(request)
         ws = web.WebSocketResponse()
         await ws.prepare(request)
 
         self.web_output.set_connection(ws, self.loop)
-        self._start_engine()
+        self._start_engine(session_name)
 
         async for msg in ws:
             if msg.type == web.WSMsgType.TEXT:
@@ -51,7 +52,7 @@ class WebServer:
                 if data.get('type') == 'reset':
                     self._stop_engine()
                     self.video_input.reset()
-                    self._start_engine()
+                    self._start_engine(session_name)
                     await ws.send_json({'type': 'reset_ack'})
                     continue
 
@@ -67,10 +68,20 @@ class WebServer:
         self.web_output.set_connection(None, None)
         return ws
 
-    def _start_engine(self):
-        self.engine = self.engine_factory()
+    def _start_engine(self, session_name):
+        settings.set_live_session_output(session_name)
+        self.engine = LivenessDetectionEngine(
+            video_input=self.video_input,
+            output_modules=[self.web_output],
+            stop_event=threading.Event(),
+            web_output=self.web_output,
+        )
         self.engine_thread = threading.Thread(target=self.engine.run, daemon=True)
         self.engine_thread.start()
+
+    @staticmethod
+    def _read_session_name(request):
+        return request.rel_url.query.get("session_name", "")
 
     def _stop_engine(self):
         if self.engine:
@@ -95,7 +106,9 @@ class WebServer:
         self.loop.run_until_complete(runner.setup())
 
         ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-        ssl_context.load_cert_chain("cert.pem", "key.pem")
+        cert_path = Path(__file__).resolve().parent.parent / "cert.pem"
+        key_path = Path(__file__).resolve().parent.parent / "key.pem"
+        ssl_context.load_cert_chain(str(cert_path), str(key_path))
 
         site = web.TCPSite(
             runner,

@@ -1,7 +1,4 @@
-import os
 from collections import deque
-import msvcrt
-import signal
 import threading
 import time
 import queue
@@ -20,21 +17,20 @@ from preprocessing.video_input import EndOfStreamError
 
 
 class LivenessDetectionEngine:
-    def __init__(self, video_input, output_modules, stop_event, web_output=None, output_dir=None):
+    def __init__(self, video_input, output_modules, stop_event, web_output=None):
         self.video_input = video_input
         self.output_modules = list(output_modules)
         self.stop_event = stop_event
         self.web_output = web_output
-        self.output_dir = output_dir
 
-        self.preprocessor = Preprocessor(output_dir=output_dir)
+        self.preprocessor = Preprocessor()
         self.interactive_runner = InteractiveRunner()
         self.passive_runner = PassiveRunner()
         self.challenge_generator = ChallengeGenerator()
         self.challenge_timer = ChallengeTimer()
         self.decision_logic = DecisionLogic()
         self.feedback_overlay = FeedbackOverlay()
-        self.statistics_writer = StatisticsWriter(output_dir=output_dir)
+        self.statistics_writer = StatisticsWriter()
 
         self._last_frame_count = None
         self.render_buffer = deque()
@@ -50,8 +46,6 @@ class LivenessDetectionEngine:
 
         start_time = time.time()
         processed_count = 0
-
-        self._setup_ctrlc_handler()
 
         try:
             while not self.stop_event.is_set():
@@ -199,14 +193,6 @@ class LivenessDetectionEngine:
         for module in self.output_modules:
             module.start()
 
-    def _setup_ctrlc_handler(self):
-        if threading.current_thread() is not threading.main_thread():
-            return
-        def handler(sig, frame):
-            print("CTRL+C pressed, stopping...")
-            self.stop_event.set()
-        signal.signal(signal.SIGINT, handler)
-
     def _stop_outputs(self):
         for module in reversed(self.output_modules):
             module.stop()
@@ -218,12 +204,10 @@ class LivenessDetectionEngine:
             self._video_writer_initialized = True
             return
         height, width = frame.shape[:2]
-        os.makedirs(self.output_dir, exist_ok=True)
         writer = VideoWriter(
             width=width,
             height=height,
             fps=self.video_input.fps,
-            output_dir=self.output_dir,
         )
         writer.start()
         self.output_modules.append(writer)

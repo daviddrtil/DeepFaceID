@@ -14,6 +14,10 @@ const finalStatus = document.getElementById('final-status');
 const finalMessage = document.getElementById('final-message');
 const successSound = document.getElementById('success-sound');
 const failSound = document.getElementById('fail-sound');
+const sessionNameInput = document.getElementById('session-name');
+const sessionError = document.getElementById('session-error');
+
+const LAST_SESSION_NAME_KEY = 'deepfaceid:last-session-name';
 
 let ws = null;
 let stream = null;
@@ -26,6 +30,10 @@ let canvasInitialized = false;
 
 let target_fps = 30;
 let frameCaptureInterval = 1000 / target_fps;
+
+function sanitizeSessionName(name) {
+    return name.trim().replace(/\s+/g, '_').toLowerCase();
+}
 
 function showScreen(screen) {
     [startScreen, mainScreen, completionScreen].forEach(s => s.classList.remove('active'));
@@ -47,9 +55,10 @@ async function requestCamera() {
     }
 }
 
-function connectWebSocket() {
+function connectWebSocket(sessionName) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+    const encodedName = encodeURIComponent(sessionName);
+    ws = new WebSocket(`${protocol}//${window.location.host}/ws?session_name=${encodedName}`);
 
     ws.onopen = () => {
         console.log('WebSocket connected');
@@ -270,19 +279,45 @@ function reset() {
     lastCompletedAction = null;
     lastServerData = null;
     canvasInitialized = false;
+    sessionError.classList.add('hidden');
+    permissionError.classList.add('hidden');
     showScreen(startScreen);
 }
 
 async function startVerification() {
+    const sanitizedSessionName = sanitizeSessionName(sessionNameInput.value || '');
+    if (!sanitizedSessionName) {
+        sessionError.textContent = 'Please enter your name before starting.';
+        sessionError.classList.remove('hidden');
+        return;
+    }
+    sessionError.classList.add('hidden');
+    sessionNameInput.value = sanitizedSessionName;
+    localStorage.setItem(LAST_SESSION_NAME_KEY, sanitizedSessionName);
     permissionError.classList.add('hidden');
 
     const cameraOk = await requestCamera();
     if (!cameraOk) return;
 
     showScreen(mainScreen);
-    connectWebSocket();
+    connectWebSocket(sanitizedSessionName);
 }
 
+function restoreLastSessionName() {
+    const lastName = localStorage.getItem(LAST_SESSION_NAME_KEY);
+    if (lastName) {
+        sessionNameInput.value = lastName;
+    }
+}
+
+sessionNameInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        startVerification();
+    }
+});
+
+restoreLastSessionName();
 startBtn.addEventListener('click', startVerification);
 resetBtn.addEventListener('click', reset);
 tryAgainBtn.addEventListener('click', reset);

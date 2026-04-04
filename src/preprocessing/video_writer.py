@@ -8,14 +8,10 @@ import numpy as np
 
 
 class VideoWriter:
-    def __init__(self, width, height, fps, output_dir=None):
+    def __init__(self, width, height, fps):
         self.width = width
         self.height = height
         self.fps = fps
-        self.output_dir = output_dir if output_dir else settings.config.output_dir
-        self.output_video_path = os.path.join(self.output_dir, "output.mp4")
-
-        os.makedirs(self.output_dir, exist_ok=True)
 
         ffmpeg_cmd = [
             'ffmpeg', '-y',
@@ -25,7 +21,7 @@ class VideoWriter:
             '-r', str(self.fps), '-i', '-', '-c:v',
             'libx265', '-x265-params', 'log-level=error',
             '-crf', '24', '-preset', 'fast', '-pix_fmt', 'yuv420p',
-            self.output_video_path
+            settings.config.output_video_path
         ]
         self.ffmpeg_process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
 
@@ -52,7 +48,7 @@ class VideoWriter:
                     self.ffmpeg_process.stdin.flush()
 
                 if frame_count >= 0 and settings.config.frame_sampling > 0 and frame_count % settings.config.frame_sampling == 0:
-                    output_file = os.path.join(self.output_dir, f"frame{frame_count:05d}.jpg")
+                    output_file = os.path.join(settings.config.output_dir, f"frame{frame_count:05d}.jpg")
                     cv2.imwrite(output_file, frame)
 
         except Exception as e:
@@ -79,4 +75,4 @@ class VideoWriter:
 
         if self.ffmpeg_process:
             self.ffmpeg_process.wait()
-        print(f"Output saved to {self.output_video_path}")
+        print(f"Output saved to {settings.config.output_video_path}")
