@@ -18,8 +18,8 @@ from preprocessing.live_video_queue import LiveVideoQueue
 class WebSocketInput(VideoInput):
     def __init__(self):
         super().__init__()
-        self.width = 1920
-        self.height = 1080
+        self.width = None
+        self.height = None
         self.fps = 30.0
         self.is_live = True
         self.queue = LiveVideoQueue(maxsize=4)
@@ -28,14 +28,15 @@ class WebSocketInput(VideoInput):
         self.connected = threading.Event()
 
     def print_video_info(self):
-        print(f"WebSocket Input: {self.width}x{self.height} @ {self.fps:.0f} fps")
+        pass
 
     def put_frame(self, frame, width, height):
         if self.start_time is None:
             self.start_time = time.time()
-        self.width = width
-        self.height = height
-        timestamp_ms = self.frame_count * 100
+            self.width = width
+            self.height = height
+            print(f"WebSocket Input: {width}x{height} at {self.fps:.0f} fps")
+        timestamp_ms = int((time.time() - self.start_time) * 1000)
         self.queue.put_latest((frame, timestamp_ms, self.frame_count))
         self.frame_count += 1
 
@@ -53,6 +54,8 @@ class WebSocketInput(VideoInput):
     def reset(self):
         self.frame_count = 0
         self.start_time = None
+        self.width = None
+        self.height = None
         self.stop_event.clear()
         while not self.queue.empty():
             try:

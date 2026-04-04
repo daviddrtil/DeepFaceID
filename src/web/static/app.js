@@ -24,6 +24,9 @@ let lastCompletedAction = null;
 let lastServerData = null;
 let canvasInitialized = false;
 
+let target_fps = 30;
+let frameCaptureInterval = 1000 / target_fps;
+
 function showScreen(screen) {
     [startScreen, mainScreen, completionScreen].forEach(s => s.classList.remove('active'));
     screen.classList.add('active');
@@ -32,7 +35,7 @@ function showScreen(screen) {
 async function requestCamera() {
     try {
         stream = await navigator.mediaDevices.getUserMedia({
-            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }    // TODO: fix camera resolution
+            video: { facingMode: 'user' }
         });
         webcam.srcObject = stream;
         await webcam.play();
@@ -71,7 +74,7 @@ function connectWebSocket() {
 }
 
 function startFrameCapture() {
-    frameInterval = setInterval(captureAndSendFrame, 100);
+    frameInterval = setInterval(captureAndSendFrame, frameCaptureInterval);
 }
 
 function stopFrameCapture() {
@@ -83,7 +86,7 @@ function stopFrameCapture() {
 
 function startDrawLoop() {
     ctx = overlay.getContext('2d');
-    drawInterval = setInterval(drawOverlay, 33);
+    drawInterval = setInterval(drawOverlay, frameCaptureInterval);
 }
 
 function stopDrawLoop() {
@@ -95,9 +98,30 @@ function stopDrawLoop() {
 
 function initCanvasSize() {
     if (webcam.videoWidth === 0) return false;
-    if (canvasInitialized && overlay.width === webcam.videoWidth) return true;
-    overlay.width = webcam.videoWidth;
-    overlay.height = webcam.videoHeight;
+    
+    const container = webcam.parentElement;
+    const containerW = container.clientWidth;
+    const containerH = container.clientHeight;
+    const videoW = webcam.videoWidth;
+    const videoH = webcam.videoHeight;
+    
+    const containerAspect = containerW / containerH;
+    const videoAspect = videoW / videoH;
+    
+    let displayW, displayH;
+    if (videoAspect > containerAspect) {
+        displayW = containerW;
+        displayH = containerW / videoAspect;
+    } else {
+        displayH = containerH;
+        displayW = containerH * videoAspect;
+    }
+    
+    overlay.width = videoW;
+    overlay.height = videoH;
+    overlay.style.width = displayW + 'px';
+    overlay.style.height = displayH + 'px';
+    
     canvasInitialized = true;
     return true;
 }
@@ -153,6 +177,7 @@ function handleServerResponse(data) {
     }
 }
 
+// TODO: fix mirrored sides properly
 const MIRRORED_ACTIONS = {
     'Cover Left Eye': 'Cover Right Eye',
     'Cover Right Eye': 'Cover Left Eye',
@@ -192,20 +217,8 @@ function drawAlignmentCircle(faceDetected) {
     const centerY = h / 2 - h * 0.05;
     const radius = Math.min(w, h) * 0.35;
 
-    // Get actual displayed size to compensate for CSS stretching
-    const displayedWidth = overlay.clientWidth || w;
-    const displayedHeight = overlay.clientHeight || h;
-    const scaleX = displayedWidth / w;
-    const scaleY = displayedHeight / h;
-
-    ctx.save();
-    ctx.translate(centerX, centerY);
-    // Compensate for non-uniform scaling by CSS
-    ctx.scale(scaleY / scaleX, 1);
     ctx.beginPath();
-    ctx.arc(0, 0, radius, 0, 2 * Math.PI);
-    ctx.restore();
-
+    ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
     ctx.strokeStyle = faceDetected ? '#00ff88' : 'rgba(255, 255, 255, 0.5)';
     ctx.lineWidth = 3;
     ctx.setLineDash(faceDetected ? [] : [10, 10]);

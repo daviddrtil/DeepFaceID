@@ -10,9 +10,8 @@ import settings
 
 class FeedbackOverlay:
     def __init__(self):
-        self.font_size = 32 # TODO: should be dynamic based on frame size
-        self.font = FeedbackOverlay._load_font(self.font_size)
-
+        self.font_size = None
+        self.font = None
         self.face_specs = {
             "mesh": solutions.drawing_utils.DrawingSpec(thickness=1, circle_radius=0, color=(80, 80, 80)),
             "oval": solutions.drawing_utils.DrawingSpec(thickness=1, circle_radius=0, color=(200, 200, 200)),
@@ -25,6 +24,11 @@ class FeedbackOverlay:
             "bones": solutions.drawing_utils.DrawingSpec(thickness=2, circle_radius=2, color=(0, 165, 255)),
         }
         self.custom_nose_connections = MetricCalculators.CUSTOM_NOSE_CONNECTIONS
+
+    @staticmethod
+    def _get_font_size(frame_height):
+        base_font_size = 32
+        return max(16, int(base_font_size * frame_height / settings.config.base_frame_height))
 
     @staticmethod
     def _load_font(font_size):
@@ -62,6 +66,10 @@ class FeedbackOverlay:
         frame[mask] = frame[mask] * 0.7 + np.array([0, 255, 0]) * 0.3
 
     def _draw_text_line(self, frame, text, color_bgr, start_y, align="left"):
+        if (self.font is None):
+            self.font_size = self._get_font_size(frame.shape[0])
+            self.font = self._load_font(self.font_size)
+
         left, top, right, bottom = self.font.getbbox(text)
         box_w = (right - left) + 20
         box_h = (bottom - top) + 20

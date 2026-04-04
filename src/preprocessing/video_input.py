@@ -7,9 +7,9 @@ class EndOfStreamError(Exception):
 class VideoInput:
     def __init__(self):
         self.cap = None
-        self.width = 1920
-        self.height = 1080
-        self.fps = 30.0
+        self.width = None
+        self.height = None
+        self.fps = None
         self.is_live = False
         self.total_frames = 0
 

@@ -6,9 +6,9 @@ from preprocessing.preprocessing_config import PreprocessingConfig
 
 
 class Preprocessor:
-    def __init__(self):
+    def __init__(self, output_dir=None):
         self.cfg = PreprocessingConfig()
-        self.aligner = FaceAligner(self.cfg.face_output_size, self.cfg.keypoint_indices)
+        self.aligner = FaceAligner(self.cfg.face_output_size, self.cfg.keypoint_indices, output_dir=output_dir)
         self.stabilizer = OneEuroFilter(
             self.cfg.one_euro_min_cutoff,
             self.cfg.one_euro_beta,

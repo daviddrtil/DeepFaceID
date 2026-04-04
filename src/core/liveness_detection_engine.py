@@ -1,3 +1,4 @@
+import os
 from collections import deque
 import msvcrt
 import signal
@@ -13,18 +14,20 @@ from core.feedback_overlay import FeedbackOverlay
 from interactive.interactive_runner import InteractiveRunner
 from passive.passive_runner import PassiveRunner
 from preprocessing.preprocessor import Preprocessor
+from preprocessing.video_writer import VideoWriter
 from preprocessing.statistics_writer import StatisticsWriter
-from preprocessing.video_input import EndOfStreamError 
+from preprocessing.video_input import EndOfStreamError
 
 
 class LivenessDetectionEngine:
     def __init__(self, video_input, output_modules, stop_event, web_output=None, output_dir=None):
         self.video_input = video_input
-        self.output_modules = output_modules
+        self.output_modules = list(output_modules)
         self.stop_event = stop_event
         self.web_output = web_output
+        self.output_dir = output_dir
 
-        self.preprocessor = Preprocessor()
+        self.preprocessor = Preprocessor(output_dir=output_dir)
         self.interactive_runner = InteractiveRunner()
         self.passive_runner = PassiveRunner()
         self.challenge_generator = ChallengeGenerator()
@@ -37,6 +40,7 @@ class LivenessDetectionEngine:
         self.render_buffer = deque()
         self.delay_frames = 5
         self.final_status = None
+        self._video_writer_initialized = False
 
     def run(self):
         self.video_input.print_video_info()
@@ -53,7 +57,6 @@ class LivenessDetectionEngine:
             while not self.stop_event.is_set():
                 if settings.config.max_frames is not None and processed_count >= settings.config.max_frames:
                     break
-                self._check_keyboard_stop()
 
                 try:
                     frame, timestamp_ms, frame_count = self.video_input.get_frame()
@@ -63,12 +66,9 @@ class LivenessDetectionEngine:
                 except EndOfStreamError:
                     break
 
+                self._init_video_writer(frame)
                 preprocessed = self.preprocessor.process_frame(frame, timestamp_ms, frame_count, self.video_input.fps)
                 
-                if self.video_input.is_live and getattr(self, "_last_frame_count", None) is not None:
-                    gap = frame_count - self._last_frame_count - 1
-                    if gap > 0:
-                        self._put_padding_frames(gap)
                 self._last_frame_count = frame_count
 
                 current_action = self.challenge_generator.get_current_action()
@@ -199,12 +199,6 @@ class LivenessDetectionEngine:
         for module in self.output_modules:
             module.start()
 
-    def _check_keyboard_stop(self):
-        if msvcrt.kbhit():
-            if msvcrt.getch() == b'\x1b':
-                print("ESC pressed, stopping...")   # TODO: remove
-                self.stop_event.set()
-
     def _setup_ctrlc_handler(self):
         if threading.current_thread() is not threading.main_thread():
             return
@@ -217,10 +211,21 @@ class LivenessDetectionEngine:
         for module in reversed(self.output_modules):
             module.stop()
 
-    def _put_padding_frames(self, gap):
-        if gap <= 0:
+    def _init_video_writer(self, frame):
+        if self._video_writer_initialized or not self.video_input.is_live:
             return
-        for module in self.output_modules:
-            pad = getattr(module, "put_repeated_frames", None)
-            if callable(pad):
-                pad(gap)
+        if not settings.config.save_output:
+            self._video_writer_initialized = True
+            return
+        height, width = frame.shape[:2]
+        os.makedirs(self.output_dir, exist_ok=True)
+        writer = VideoWriter(
+            width=width,
+            height=height,
+            fps=self.video_input.fps,
+            output_dir=self.output_dir,
+        )
+        writer.start()
+        self.output_modules.append(writer)
+        self._video_writer_initialized = True
+        print(f"VideoWriter initialized: {width}x{height} at {self.video_input.fps:.0f} fps")

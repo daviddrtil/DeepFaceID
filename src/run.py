@@ -31,6 +31,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # TODO: this can be definitelly done cleaner
     if args.output_dir is None:
         args.output_dir = str(PathHelper.get_timestamped_path(project_root / "outputs"))
 
@@ -40,8 +41,9 @@ if __name__ == "__main__":
     log_filter = LogFilter()
     log_filter.start()
 
+    # TODO: refactor, maybe move to different place and remove the sig, frame parameters if not needed
     def sigint_handler(sig, frame):
-        print("\nCtrl+C pressed, stopping...")
+        print("Ctrl+C pressed, stopping...")
         stop_event.set()
     signal.signal(signal.SIGINT, sigint_handler)
 
@@ -50,22 +52,13 @@ if __name__ == "__main__":
             video_input = WebSocketInput()
             web_output = WebOutput()
 
+            # TODO: this can be cleaner, maybe move engine creation to a different place
             def create_engine():
                 session_output_dir = str(PathHelper.get_timestamped_path(project_root / "outputs"))
                 engine_stop = threading.Event()
-                output_modules = [web_output]
-                if settings.config.save_output:
-                    import os
-                    os.makedirs(session_output_dir, exist_ok=True)
-                    output_modules.append(VideoWriter(
-                        width=video_input.width,
-                        height=video_input.height,
-                        fps=video_input.fps,
-                        output_dir=session_output_dir,
-                    ))
                 return LivenessDetectionEngine(
                     video_input=video_input,
-                    output_modules=output_modules,
+                    output_modules=[web_output],
                     stop_event=engine_stop,
                     web_output=web_output,
                     output_dir=session_output_dir,
@@ -82,7 +75,6 @@ if __name__ == "__main__":
         else:
             video_input = StaticVideoLoader()
             output_modules = [VideoWriter(width=video_input.width, height=video_input.height, fps=video_input.fps)]
-
             engine = LivenessDetectionEngine(
                 video_input=video_input,
                 output_modules=output_modules,
@@ -90,7 +82,7 @@ if __name__ == "__main__":
             )
             engine.run()
     except KeyboardInterrupt:
-        print("\nShutting down...")
+        print("Keyboard interrupt: Shutting down...")
     except Exception:
         traceback.print_exc()
     finally:
