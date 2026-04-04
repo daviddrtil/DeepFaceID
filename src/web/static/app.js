@@ -35,6 +35,19 @@ function sanitizeSessionName(name) {
     return name.trim().replace(/\s+/g, '_').toLowerCase();
 }
 
+function showSessionError(message) {
+    sessionError.textContent = message;
+    sessionError.classList.remove('hidden');
+    sessionNameInput.classList.add('input-error');
+    startBtn.disabled = true;
+}
+
+function clearSessionError() {
+    sessionError.classList.add('hidden');
+    sessionNameInput.classList.remove('input-error');
+    startBtn.disabled = false;
+}
+
 function showScreen(screen) {
     [startScreen, mainScreen, completionScreen].forEach(s => s.classList.remove('active'));
     screen.classList.add('active');
@@ -143,8 +156,6 @@ function captureAndSendFrame() {
     tempCanvas.width = webcam.videoWidth;
     tempCanvas.height = webcam.videoHeight;
     const tempCtx = tempCanvas.getContext('2d');
-    tempCtx.translate(tempCanvas.width, 0);
-    tempCtx.scale(-1, 1);
     tempCtx.drawImage(webcam, 0, 0);
 
     const dataUrl = tempCanvas.toDataURL('image/jpeg', 0.7);
@@ -177,7 +188,7 @@ function handleServerResponse(data) {
         if (data.completed_action && data.completed_action !== lastCompletedAction) {
             lastCompletedAction = data.completed_action;
             playSuccessSound();
-            showActionCompleteFlash(getMirroredActionName(data.completed_action));
+            showActionCompleteFlash(data.completed_action);
         }
 
         if (data.final) {
@@ -186,21 +197,9 @@ function handleServerResponse(data) {
     }
 }
 
-// TODO: fix mirrored sides properly
-const MIRRORED_ACTIONS = {
-    'Cover Left Eye': 'Cover Right Eye',
-    'Cover Right Eye': 'Cover Left Eye',
-    'Turn Head Left': 'Turn Head Right',
-    'Turn Head Right': 'Turn Head Left',
-};
-
-function getMirroredActionName(action) {
-    return MIRRORED_ACTIONS[action] || action;
-}
-
 function updateUI(data) {
     if (data.action) {
-        actionPrompt.textContent = getMirroredActionName(data.action);
+        actionPrompt.textContent = data.action;
     } else {
         actionPrompt.textContent = '';
     }
@@ -279,7 +278,7 @@ function reset() {
     lastCompletedAction = null;
     lastServerData = null;
     canvasInitialized = false;
-    sessionError.classList.add('hidden');
+    clearSessionError();
     permissionError.classList.add('hidden');
     showScreen(startScreen);
 }
@@ -287,11 +286,10 @@ function reset() {
 async function startVerification() {
     const sanitizedSessionName = sanitizeSessionName(sessionNameInput.value || '');
     if (!sanitizedSessionName) {
-        sessionError.textContent = 'Please enter your name before starting.';
-        sessionError.classList.remove('hidden');
+        showSessionError('* Please enter your name before starting.');
         return;
     }
-    sessionError.classList.add('hidden');
+    clearSessionError();
     sessionNameInput.value = sanitizedSessionName;
     localStorage.setItem(LAST_SESSION_NAME_KEY, sanitizedSessionName);
     permissionError.classList.add('hidden');
@@ -314,6 +312,12 @@ sessionNameInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
         event.preventDefault();
         startVerification();
+    }
+});
+
+sessionNameInput.addEventListener('input', () => {
+    if (sessionNameInput.value.trim()) {
+        clearSessionError();
     }
 });
 

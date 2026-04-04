@@ -46,7 +46,7 @@ body {
     background-clip: text;
 }
 
-#start-screen p {
+#start-screen p:not(.error) {
     color: #888;
     margin-bottom: 2rem;
     font-size: 1.1rem;
@@ -69,6 +69,12 @@ body {
     box-shadow: 0 0 0 2px rgba(0, 217, 255, 0.2);
 }
 
+.text-input.input-error,
+.text-input.input-error:focus {
+    border-color: #ff4444;
+    box-shadow: 0 0 0 2px rgba(255, 68, 68, 0.2);
+}
+
 .btn-primary {
     background: linear-gradient(90deg, #00d9ff, #00ff88);
     color: #000;
@@ -82,9 +88,14 @@ body {
     width: 100%;
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
     transform: scale(1.05);
     box-shadow: 0 0 30px rgba(0, 217, 255, 0.4);
+}
+
+.btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 .btn-secondary {
@@ -106,6 +117,11 @@ body {
     color: #ff4444;
     margin-top: 1rem;
     margin-bottom: 0.3rem;
+}
+
+#session-error {
+    margin-top: 0.0rem;
+    margin-bottom: 1.25rem;
 }
 
 .hidden {
