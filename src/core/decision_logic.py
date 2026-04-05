@@ -5,7 +5,7 @@ class DecisionLogic:
         if timeout_failed:
             return {
                 'status': 'fail',
-                'display_status': 'FAIL (action timeout)',
+                'display_status': 'Action Timeout',
                 'passive_ok': passive_score_avg is not None and passive_score_avg <= passive_runner.DEEPFAKE_SCORE_THRESHOLD,
                 'interactive_complete': False,
             }
@@ -14,10 +14,10 @@ class DecisionLogic:
         interactive_complete = actions_count > 0 and actions_completed_count >= actions_count
         if passive_ok and interactive_complete:
             status = 'pass'
-            display_status = 'Decision: PASS'
+            display_status = 'Authorized'
         elif interactive_complete:
             status = 'fail'
-            display_status = 'Decision: FAIL'
+            display_status = 'Failed'
         else:
             status = 'pending'
             display_status = f'{actions_completed_count}/{actions_count} actions completed'

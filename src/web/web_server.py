@@ -39,11 +39,12 @@ class WebServer:
 
     async def _websocket_handler(self, request):
         session_name = self._read_session_name(request)
+        deepfake_label = self._read_deepfake_label(request)
         ws = web.WebSocketResponse()
         await ws.prepare(request)
 
         self.web_output.set_connection(ws, self.loop)
-        self._start_engine(session_name)
+        self._start_engine(session_name, deepfake_label)
 
         async for msg in ws:
             if msg.type == web.WSMsgType.TEXT:
@@ -52,7 +53,7 @@ class WebServer:
                 if data.get('type') == 'reset':
                     self._stop_engine()
                     self.video_input.reset()
-                    self._start_engine(session_name)
+                    self._start_engine(session_name, deepfake_label)
                     await ws.send_json({'type': 'reset_ack'})
                     continue
 
@@ -68,8 +69,8 @@ class WebServer:
         self.web_output.set_connection(None, None)
         return ws
 
-    def _start_engine(self, session_name):
-        settings.set_live_session_output(session_name)
+    def _start_engine(self, session_name, deepfake_label):
+        settings.set_live_session_output(session_name, deepfake_label)
         self.engine = LivenessDetectionEngine(
             video_input=self.video_input,
             output_modules=[self.web_output],
@@ -82,6 +83,11 @@ class WebServer:
     @staticmethod
     def _read_session_name(request):
         return request.rel_url.query.get("session_name", "")
+
+    @staticmethod
+    def _read_deepfake_label(request):
+        label = request.rel_url.query.get("deepfake_label", "")
+        return label if label in ('real', 'fake') else None
 
     def _stop_engine(self):
         if self.engine:

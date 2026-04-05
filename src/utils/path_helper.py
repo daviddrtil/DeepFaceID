@@ -17,11 +17,17 @@ class PathHelper:
         return (safe_name or "session").lower()
 
     @staticmethod
-    def get_live_session_path(base_path, session_name):
+    def get_live_session_path(base_path, session_name, deepfake_label):
         os.makedirs(base_path, exist_ok=True)
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         sanitized_name = PathHelper.sanitize_session_name(session_name)
-        return Path(base_path) / f"{sanitized_name}_{timestamp}"
+        
+        if deepfake_label in ('real', 'fake'):
+            folder_name = f"{sanitized_name}_{deepfake_label}_{timestamp}"
+        else:
+            folder_name = f"{sanitized_name}_{timestamp}"
+        
+        return Path(base_path) / folder_name
 
     @staticmethod
     def get_timestamped_path(base_path):

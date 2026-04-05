@@ -11,13 +11,15 @@ const actionPrompt = document.getElementById('action-prompt');
 const progressFill = document.getElementById('progress-fill');
 const statusText = document.getElementById('status-text');
 const finalStatus = document.getElementById('final-status');
-const finalMessage = document.getElementById('final-message');
+const confidenceDisplay = document.getElementById('confidence-display');
 const successSound = document.getElementById('success-sound');
 const failSound = document.getElementById('fail-sound');
 const sessionNameInput = document.getElementById('session-name');
 const sessionError = document.getElementById('session-error');
+const deepfakeLabelCheckbox = document.getElementById('deepfake-label-checkbox');
 
 const LAST_SESSION_NAME_KEY = 'deepfaceid:last-session-name';
+const LAST_DEEPFAKE_LABEL_KEY = 'deepfaceid:last-deepfake-label';
 
 let ws = null;
 let stream = null;
@@ -27,6 +29,7 @@ let drawInterval = null;
 let lastCompletedAction = null;
 let lastServerData = null;
 let canvasInitialized = false;
+let currentDeepfakeLabel = null;
 
 let target_fps = 30;
 let frameCaptureInterval = 1000 / target_fps;
@@ -68,10 +71,11 @@ async function requestCamera() {
     }
 }
 
-function connectWebSocket(sessionName) {
+function connectWebSocket(sessionName, deepfakeLabel) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const encodedName = encodeURIComponent(sessionName);
-    ws = new WebSocket(`${protocol}//${window.location.host}/ws?session_name=${encodedName}`);
+    const encodedLabel = encodeURIComponent(deepfakeLabel || '');
+    ws = new WebSocket(`${protocol}//${window.location.host}/ws?session_name=${encodedName}&deepfake_label=${encodedLabel}`);
 
     ws.onopen = () => {
         console.log('WebSocket connected');
@@ -253,9 +257,18 @@ function showCompletion(data) {
     stopDrawLoop();
     if (ws) ws.close();
 
-    finalStatus.textContent = data.status === 'pass' ? 'AUTHORIZED' : 'FAILED';
+    finalStatus.textContent = data.status_text;
     finalStatus.className = data.status;
-    finalMessage.textContent = data.status_text;
+
+    const score = data.passive_score;
+    if (score !== undefined && score !== null) {
+        const pct = (score * 100).toFixed(0);
+        const conf = score <= 0.5 ? 'Real' : 'Fake';
+        confidenceDisplay.textContent = `Score: ${pct}% (${conf})`;
+        confidenceDisplay.className = `confidence-display ${score <= 0.5 ? 'real' : 'fake'}`;
+    } else {
+        confidenceDisplay.textContent = '';
+    }
 
     if (data.status === 'pass') {
         playSuccessSound();
@@ -278,6 +291,7 @@ function reset() {
     lastCompletedAction = null;
     lastServerData = null;
     canvasInitialized = false;
+    currentDeepfakeLabel = null;
     clearSessionError();
     permissionError.classList.add('hidden');
     showScreen(startScreen);
@@ -292,19 +306,28 @@ async function startVerification() {
     clearSessionError();
     sessionNameInput.value = sanitizedSessionName;
     localStorage.setItem(LAST_SESSION_NAME_KEY, sanitizedSessionName);
+
+    const isDeepfake = deepfakeLabelCheckbox.checked;
+    currentDeepfakeLabel = isDeepfake ? 'fake' : 'real';
+    localStorage.setItem(LAST_DEEPFAKE_LABEL_KEY, isDeepfake ? 'true' : 'false');
+
     permissionError.classList.add('hidden');
 
     const cameraOk = await requestCamera();
     if (!cameraOk) return;
 
     showScreen(mainScreen);
-    connectWebSocket(sanitizedSessionName);
+    connectWebSocket(sanitizedSessionName, currentDeepfakeLabel);
 }
 
 function restoreLastSessionName() {
     const lastName = localStorage.getItem(LAST_SESSION_NAME_KEY);
     if (lastName) {
         sessionNameInput.value = lastName;
+    }
+    const lastLabel = localStorage.getItem(LAST_DEEPFAKE_LABEL_KEY);
+    if (lastLabel === 'true') {
+        deepfakeLabelCheckbox.checked = true;
     }
 }
 

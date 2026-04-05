@@ -29,6 +29,7 @@ class PipelineConfig:
     base_frame_height: int = 1080
     base_video_fps: int = 30
     input_queue_size: int = 30
+    deepfake_label: str | None = None
 
 def initialize_config(args):
     global config
@@ -59,7 +60,7 @@ def initialize_config(args):
         web_port=args.web_port,
     )
 
-def set_output_dir(output_dir):
+def set_output_dir(output_dir, deepfake_label):
     global config
 
     output_dir_path = Path(output_dir)
@@ -71,9 +72,10 @@ def set_output_dir(output_dir):
         output_dir=str(output_dir_path),
         output_video_path=str(output_video_path),
         output_stats_path=str(output_stats_path),
+        deepfake_label=deepfake_label
     )
 
-def set_live_session_output(session_name):
-    session_output_dir = PathHelper.get_live_session_path(config.output_root_dir, session_name)
-    set_output_dir(session_output_dir)
+def set_live_session_output(session_name, deepfake_label):
+    session_output_dir = PathHelper.get_live_session_path(config.output_root_dir, session_name, deepfake_label)
+    set_output_dir(session_output_dir, deepfake_label)
     return session_output_dir

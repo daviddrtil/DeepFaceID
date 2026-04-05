@@ -228,12 +228,6 @@ body {
     color: #ff4444;
 }
 
-#final-message {
-    color: #888;
-    margin-bottom: 2rem;
-    font-size: 1.1rem;
-}
-
 #try-again-btn {
     margin-top: 1rem;
 }
@@ -256,4 +250,76 @@ body {
     animation: flash 1s ease-out forwards;
     z-index: 100;
     pointer-events: none;
+}
+
+/* Deepfake Label Toggle */
+.label-toggle-section {
+    margin: 0rem 0 1.5rem 0;
+}
+
+.toggle-switch {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    cursor: pointer;
+    justify-content: center;
+}
+
+.toggle-switch input {
+    display: none;
+}
+
+.toggle-slider {
+    width: 44px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    position: relative;
+    transition: background 0.2s;
+}
+
+.toggle-slider::after {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    background: #888;
+    border-radius: 50%;
+    top: 3px;
+    left: 3px;
+    transition: transform 0.2s, background 0.2s;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background: rgba(255, 68, 68, 0.3);
+}
+
+.toggle-switch input:checked + .toggle-slider::after {
+    transform: translateX(20px);
+    background: #ff4444;
+}
+
+.toggle-label {
+    color: #666;
+    font-size: 0.9rem;
+    transition: color 0.2s;
+}
+
+.toggle-switch input:checked ~ .toggle-label {
+    color: #ff6666;
+}
+
+/* Confidence Display */
+.confidence-display {
+    margin-bottom: 1rem;
+    font-weight: 500;
+    font-size: 1.1rem;
+}
+
+.confidence-display.real {
+    color: #00ff88;
+}
+
+.confidence-display.fake {
+    color: #ff6666;
 }
