@@ -8,21 +8,28 @@ class ChallengeGenerator:
         self.current_index = 0
 
     def _generate_actions(self, count):
-        sequence = random.choice(ACTION_SEQUENCES)
         actions: list[ChallengeType] = [
             random.choice(list(OcclusionType)),
             random.choice(COMPLEX_ACTIONS),
-            *random.sample(sequence.actions, k=len(sequence.actions)),
         ]
 
-        remaining = count - len(actions)
+        sequence = random.choice(ACTION_SEQUENCES)
+        seq_actions = random.sample(sequence.actions, len(sequence.actions))
+        remaining = count - len(actions) - len(seq_actions)
         if remaining > 0:
             all_single = list(PoseType) + list(OcclusionType) + list(MovementType)
             extras = random.sample(all_single, min(remaining, len(all_single)))
             actions.extend(extras)
 
-        random.shuffle(actions)
-        return actions
+        while True:
+            result = actions.copy()
+            random.shuffle(result)
+            
+            insert_idx = random.randint(0, len(result))
+            result[insert_idx:insert_idx] = seq_actions
+            
+            if all(result[i] != result[i+1] for i in range(len(result) - 1)):
+                return result
 
     def get_current_action(self):
         if self.current_index >= len(self.actions):
