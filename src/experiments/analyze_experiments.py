@@ -2,7 +2,7 @@
 Analyze experiment results from stats.txt files.
 Parses output directories to evaluate deepfake detection accuracy.
 
-Usage: python src/analyze_experiments.py [--outputs-dir PATH]
+Usage: python src/experiments/analyze_experiments.py [--outputs-dir PATH]
 """
 
 import re
@@ -39,6 +39,13 @@ def parse_folder_name(folder_name):
     return folder_name, None, None
 
 
+def _parse_score(match):
+    if not match:
+        return None
+    val = match.group(1)
+    return None if val == 'None' else float(val)
+
+
 def parse_stats_line(line):
     """Parse a single line from stats.txt."""
     result = {}
@@ -47,24 +54,16 @@ def parse_stats_line(line):
     if frame_match:
         result['frame'] = int(frame_match.group(1))
     
-    passive_avg_match = re.search(r'passive_avg=(\d+\.\d+|None)', line)
-    if passive_avg_match:
-        val = passive_avg_match.group(1)
-        result['passive_avg'] = None if val == 'None' else float(val)
+    result['passive_avg'] = _parse_score(re.search(r'passive_avg=(\d+\.\d+|None)', line))
+    result['passive_cur'] = _parse_score(re.search(r'passive_cur=(\d+\.\d+|None)', line))
+    result['spatial'] = _parse_score(re.search(r'spatial=(\d+\.\d+|None)', line))
+    result['frequency'] = _parse_score(re.search(r'frequency=(\d+\.\d+|None)', line))
+    result['temporal'] = _parse_score(re.search(r'temporal=(\d+\.\d+|None)', line))
     
-    passive_cur_match = re.search(r'passive_cur=(\d+\.\d+|None)', line)
-    if passive_cur_match:
-        val = passive_cur_match.group(1)
-        result['passive_cur'] = None if val == 'None' else float(val)
-    
-    spatial_match = re.search(r'spatial=(\d+\.\d+|None)', line)
-    if spatial_match:
-        val = spatial_match.group(1)
-        result['spatial'] = None if val == 'None' else float(val)
-    
-    spatial_frame_match = re.search(r'spatial_frame=(\d+)', line)
-    if spatial_frame_match:
-        result['spatial_frame'] = int(spatial_frame_match.group(1))
+    for name in ('spatial_frame', 'frequency_frame', 'temporal_frame'):
+        m = re.search(rf'{name}=(\d+)', line)
+        if m:
+            result[name] = int(m.group(1))
     
     action_match = re.search(r'action=([^\s|]+)', line)
     if action_match:
@@ -300,6 +299,7 @@ def print_report(metrics, action_metrics, results):
 
 def export_csv(results, output_file):
     """Export results to CSV."""
+    output_file.parent.mkdir(parents=True, exist_ok=True)
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write("session,ground_truth,final_passive_avg,predicted,correct,total_frames\n")
         for r in results:
@@ -309,22 +309,12 @@ def export_csv(results, output_file):
     print(f"Exported {len(results)} sessions to {output_file}")
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Analyze deepfake detection experiments")
-    parser.add_argument("--outputs-dir", type=str, default=None, help="Path to outputs directory")
-    args = parser.parse_args()
-    
-    project_root = Path(__file__).resolve().parent
-    outputs_dir = Path(args.outputs_dir) if args.outputs_dir else project_root / "outputs"
-    
-    print(f"Scanning: {outputs_dir}")
+def load_results(outputs_dir):
+    """Load, filter, and analyze all labeled sessions from the outputs directory."""
     sessions = find_sessions(outputs_dir)
-    print(f"Found {len(sessions)} sessions with stats.txt")
-    
     results = []
     for session in sessions:
         frames, summary = load_session(session['stats_file'])
-        # Prefer label from summary, fallback to folder name
         label = summary.get('label') if summary.get('label') not in (None, 'unknown') else session['label']
         if label not in ('real', 'fake'):
             continue
@@ -334,13 +324,26 @@ def main():
             analysis['timestamp'] = session['timestamp']
             analysis['final_decision'] = summary.get('final_decision', 'unknown')
             results.append(analysis)
+    return results
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Analyze deepfake detection experiments")
+    parser.add_argument("--outputs-dir", type=str, default=None, help="Path to outputs directory")
+    args = parser.parse_args()
     
+    src_dir = Path(__file__).resolve().parent.parent
+    outputs_dir = Path(args.outputs_dir) if args.outputs_dir else src_dir / "outputs"
+    
+    print(f"Scanning: {outputs_dir}")
+    sessions = find_sessions(outputs_dir)
+    print(f"Found {len(sessions)} sessions with stats.txt")
+    
+    results = load_results(outputs_dir)
     print(f"Labeled sessions: {len(results)}")
     
     metrics = calculate_metrics(results)
     action_metrics = calculate_action_metrics(results)
-    
-    print_report(metrics, action_metrics, results)
     
     print_report(metrics, action_metrics, results)
     
