@@ -20,7 +20,7 @@ class AnalyzerResult:
 
 
 @dataclass
-class PassiveState:
+class PassiveResult:
     spatial: AnalyzerResult
     frequency: AnalyzerResult
     temporal: AnalyzerResult
@@ -47,7 +47,9 @@ class SpatialAnalyzer:
 
     def run(self, passive_input):
         tensor = passive_input.get("passive_face_input")
-        return self.detector.predict(tensor.to(DEVICE)) if tensor is not None else None
+        if tensor is None:
+            return None
+        return self.detector.predict(tensor.to(DEVICE))
 
 
 class FrequencyAnalyzer:
@@ -83,25 +85,14 @@ class PassiveRunner:
 
     def get_passive_state(self):
         s_score, s_frame, s_avg, s_count = self.spatial.get_all()
-        if s_score is None:
-            return self._cached_state
-
         f_score, f_frame, f_avg, f_count = self.frequency.get_all(ref_frame=s_frame)
         t_score, t_frame, t_avg, t_count = self.temporal.get_all(ref_frame=s_frame)
-
-        self._cached_state = PassiveState(
+        self._cached_state = PassiveResult(
             spatial=AnalyzerResult(s_score, s_frame, s_avg, s_count),
             frequency=AnalyzerResult(f_score, f_frame, f_avg, f_count),
             temporal=AnalyzerResult(t_score, t_frame, t_avg, t_count),
         )
         return self._cached_state
-
-    def get_score_buffer(self):
-        return {
-            "spatial": self.spatial.get_score_buffer(),
-            "frequency": self.frequency.get_score_buffer(),
-            "temporal": self.temporal.get_score_buffer(),
-        }
 
     def stop(self):
         self.spatial.stop()

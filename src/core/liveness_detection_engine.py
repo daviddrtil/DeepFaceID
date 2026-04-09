@@ -98,7 +98,13 @@ class LivenessDetectionEngine:
 
                 processed_count += 1
         finally:
-            final_decision = self.final_status['status'] if self.final_status else None
+            final_decision = None
+            if self.final_status:
+                status = self.final_status.get('status')
+                if status == 'fail' and self.final_status.get('display_status') == 'Action Timeout':
+                    final_decision = 'timeout'
+                else:
+                    final_decision = status
             self.statistics_writer.write_summary(self._latest_passive_state, final_decision, settings.config.deepfake_label)
             self.statistics_writer.close()
             self.video_input.stop()

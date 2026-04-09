@@ -18,7 +18,7 @@ def _default_actions():
 
 
 @dataclass
-class InteractiveFrameData:
+class InteractiveResult:
     face_result: object = None
     hand_result: object = None
     actions: dict = field(default_factory=_default_actions)
@@ -30,7 +30,7 @@ class InteractiveFrameData:
     def empty(frame):
         h, w = frame.shape[:2]
         hand_mask = None if h == 0 or w == 0 else np.zeros((h, w), dtype=np.uint8)
-        return InteractiveFrameData(hand_mask=hand_mask)
+        return InteractiveResult(hand_mask=hand_mask)
 
 
 class InteractiveRunner:
@@ -52,7 +52,7 @@ class InteractiveRunner:
                 current_action,
                 challenge_timer,
             )
-            self.last_result = InteractiveFrameData(
+            self.last_result = InteractiveResult(
                 face_result=face_result,
                 hand_result=hand_result,
                 actions=actions,
@@ -64,7 +64,7 @@ class InteractiveRunner:
             self.last_result.completed_action = None
 
         if self.last_result is None:
-            return InteractiveFrameData.empty(frame)
+            return InteractiveResult.empty(frame)
 
         return self.last_result
 
