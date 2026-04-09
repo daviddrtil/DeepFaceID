@@ -57,7 +57,7 @@ class VideoWriter:
             if self.ffmpeg_process and self.ffmpeg_process.stdin:
                 self.ffmpeg_process.stdin.close()
 
-    def put_frame(self, frame, frame_count, action_message=None):
+    def put_frame(self, frame, frame_count, action_message):
         self.queue.put((frame, frame_count, action_message))
 
     def put_repeated_frames(self, count):

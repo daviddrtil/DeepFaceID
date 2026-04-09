@@ -1,5 +1,5 @@
 import settings
-from interactive.action_enum import get_action_name
+from interactive.action_enum import get_action_name, get_action_category
 
 
 class StatisticsWriter:
@@ -17,7 +17,7 @@ class StatisticsWriter:
     def _to_score_text(value):
         return "None  " if value is None else f"{value:.4f}"
 
-    def write_frame(self, frame_count, interactive_result, passive_result, current_action=None):
+    def write_frame(self, frame_count, interactive_result, passive_result, current_action, challenge_index, challenge_total):
         actions = interactive_result.actions
         yaw = actions.get("yaw")
         pitch = actions.get("pitch")
@@ -42,20 +42,23 @@ class StatisticsWriter:
             t_frame = passive_result.temporal.current_frame
 
         action_text = get_action_name(current_action) or "None"
+        action_text = '\'' + action_text + '\''
+        category_text = get_action_category(current_action) or "None"
+        category_text = '\'' + category_text + '\''
 
         self.file.write(
             f"frame={frame_count:04d} | "
             f"spatial_frame={s_frame:04d} frequency_frame={f_frame:04d} temporal_frame={t_frame:04d} "
             f"passive_cur={p_cur} passive_avg={p_avg} "
             f"spatial={p_s} frequency={p_f} temporal={p_t} | "
-            f"action={action_text} | "
             f"face={int(actions.get('face_detected', False))} hand={int(actions.get('hand_detected', False))} "
-            f"overlap={int(actions.get('hand_face_overlap', False))} yaw={yaw_text} pitch={pitch_text} roll={roll_text} "
+            f"overlap={int(actions.get('hand_face_overlap', False))} yaw={yaw_text} pitch={pitch_text} roll={roll_text} | "
+            f"challenge={challenge_index}/{challenge_total} action_category={category_text} action={action_text} | "
             f"pose={pose_text} occlusions={occlusion_text} expressions={expression_text}\n"
         )
         self.file.flush()
 
-    def write_summary(self, passive_result, final_decision=None, deepfake_label=None):
+    def write_summary(self, passive_result, final_decision, deepfake_label):
         self.file.write("\n--- SUMMARY ---\n")
         if passive_result:
             s = f"{passive_result.spatial.avg_score:.4f}" if passive_result.spatial.avg_score else "N/A"

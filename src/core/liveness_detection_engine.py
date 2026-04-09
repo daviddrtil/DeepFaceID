@@ -16,7 +16,7 @@ from preprocessing.video_input import EndOfStreamError
 
 
 class LivenessDetectionEngine:
-    def __init__(self, video_input, output_modules, stop_event, web_output=None):
+    def __init__(self, video_input, output_modules, stop_event, web_output):
         self.video_input = video_input
         self.output_modules = list(output_modules)
         self.stop_event = stop_event
@@ -113,11 +113,11 @@ class LivenessDetectionEngine:
             self._stop_outputs()
             print(f"Total {self._last_frame_count} frames (interactive processed: {processed_count} frames) in {time.time() - start_time:.1f}s")
 
-    def _send_web_overlay(self, interactive_result, action, decision, completed=0, total=0, overlay=None, passive_score=None):
+    def _send_web_overlay(self, interactive_result, action, decision, completed, total, overlay, passive_score):
         if not self.web_output:
             return
         result = {
-            'type': 'result',
+            'type': 'result',   # TODO: why do we need this?
             'action': get_action_name(action),
             'progress': interactive_result.challenge_progress,
             'completed': completed,
@@ -186,7 +186,7 @@ class LivenessDetectionEngine:
             module.put_frame(rendered, frame_count, action_message)
 
         self._last_output_frame_count = frame_count
-        self.statistics_writer.write_frame(frame_count, interactive_result, passive_result, action)
+        self.statistics_writer.write_frame(frame_count, interactive_result, passive_result, action, completed, total)
         if self.web_output:
             self._send_web_overlay(interactive_result, action, decision, completed, total, overlay, passive_score_avg)
         return decision

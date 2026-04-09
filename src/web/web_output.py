@@ -13,7 +13,7 @@ class WebOutput:
     def start(self):
         pass
 
-    def put_frame(self, frame, frame_count, action_message=None):
+    def put_frame(self, frame, frame_count, action_message):
         pass
 
     def put_overlay(self, overlay_data):

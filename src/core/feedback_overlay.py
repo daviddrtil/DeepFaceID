@@ -174,7 +174,7 @@ class FeedbackOverlay:
 
         return current_y
 
-    def draw(self, frame, interactive_result, passive_result, overlay=None):
+    def draw(self, frame, interactive_result, passive_result, overlay):
         if settings.config.draw_face and interactive_result.face_result and interactive_result.face_result.face_landmarks:
             self._draw_face(frame, interactive_result.face_result.face_landmarks[0])
 
