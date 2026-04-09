@@ -10,3 +10,4 @@ onnxruntime-gpu
 flask
 scikit-image
 aiohttp
+matplotlib
