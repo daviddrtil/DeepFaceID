@@ -21,7 +21,7 @@ class OcclusionType(BaseAction):
     COVER_MOUTH = auto()
     COVER_NOSE = auto()
 
-class MovementType(BaseAction):
+class ExpressionType(BaseAction):
     # Eye movements
     BLINK = auto()      # blink any eye or both
     BLINK_LEFT_EYE = auto()
@@ -43,7 +43,7 @@ class MovementType(BaseAction):
     EYEBROWS_UP = auto()
     EYEBROWS_DOWN = auto()
 
-ActionType: TypeAlias = PoseType | OcclusionType | MovementType
+ActionType: TypeAlias = PoseType | OcclusionType | ExpressionType
 
 @dataclass
 class ActionSet:
@@ -58,7 +58,7 @@ class ActionSet:
 ChallengeType: TypeAlias = ActionType | ActionSet
 
 COMPLEX_ACTIONS = [
-    ActionSet({MovementType.BLINK, MovementType.SMILE}),
+    ActionSet({ExpressionType.BLINK, ExpressionType.SMILE}),
     ActionSet({OcclusionType.COVER_LEFT_EYE, PoseType.MOVE_HEAD_LEFT}),
     ActionSet({OcclusionType.COVER_RIGHT_EYE, PoseType.MOVE_HEAD_RIGHT}),
     ActionSet({OcclusionType.COVER_MOUTH, PoseType.MOVE_HEAD_UP}),
@@ -82,7 +82,7 @@ class ActionSequence:
         self.name = " -> ".join(a.value for a in sorted_actions)
 
 ACTION_SEQUENCES = [
-    ActionSequence([MovementType.BLINK_LEFT_EYE, MovementType.BLINK_RIGHT_EYE]),
+    ActionSequence([ExpressionType.BLINK_LEFT_EYE, ExpressionType.BLINK_RIGHT_EYE]),
     ActionSequence([PoseType.MOVE_HEAD_LEFT, PoseType.MOVE_HEAD_RIGHT]),
     ActionSequence([PoseType.MOVE_HEAD_UP, PoseType.MOVE_HEAD_DOWN]),
 ]
@@ -93,3 +93,19 @@ def get_action_name(action):
     if isinstance(action, (ActionSet, ActionSequence)):
         return action.name
     return action.value
+
+
+def get_action_category(action):
+    if action is None:
+        return None
+    if isinstance(action, PoseType):
+        return 'pose'
+    if isinstance(action, OcclusionType):
+        return 'occlusion'
+    if isinstance(action, ExpressionType):
+        return 'expression'
+    if isinstance(action, ActionSet):
+        return 'complex'
+    if isinstance(action, ActionSequence):
+        return 'sequence'
+    return None

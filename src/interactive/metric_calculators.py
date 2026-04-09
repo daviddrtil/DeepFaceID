@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 from mediapipe import solutions
-from interactive.action_enum import PoseType, OcclusionType, MovementType
+from interactive.action_enum import PoseType, OcclusionType, ExpressionType
 
 
 class MetricCalculators:
@@ -203,28 +203,28 @@ class MetricCalculators:
         left_blink = scores.get("eyeBlinkLeft", 0) > self.SINGLE_EYE_BLINK_SCORE
         right_blink = scores.get("eyeBlinkRight", 0) > self.SINGLE_EYE_BLINK_SCORE
         if left_blink or right_blink:
-            expr.append(MovementType.BLINK)
+            expr.append(ExpressionType.BLINK)
         if left_blink:
-            expr.append(MovementType.BLINK_LEFT_EYE)
+            expr.append(ExpressionType.BLINK_LEFT_EYE)
         elif right_blink:
-            expr.append(MovementType.BLINK_RIGHT_EYE)
+            expr.append(ExpressionType.BLINK_RIGHT_EYE)
 
         smile = (scores.get("mouthSmileLeft", 0) + scores.get("mouthSmileRight", 0)) / 2
         jaw_open = scores.get("jawOpen", 0)
         if smile > self.SMILE_SCORE:
             if jaw_open > self.JAW_OPEN_FOR_SMILE_WITH_TEETH:
-                expr.append(MovementType.SMILE_TEETH)
+                expr.append(ExpressionType.SMILE_TEETH)
             else:
-                expr.append(MovementType.SMILE)
+                expr.append(ExpressionType.SMILE)
         if jaw_open > self.OPEN_MOUTH_SCORE:
-            expr.append(MovementType.OPEN_MOUTH)
+            expr.append(ExpressionType.OPEN_MOUTH)
 
         brow_up = (scores.get("browInnerUp", 0) + scores.get("browOuterUpLeft", 0) + scores.get("browOuterUpRight", 0)) / 3
         brow_down = (scores.get("browDownLeft", 0) + scores.get("browDownRight", 0)) / 2
         if brow_up > self.EYEBROW_UP_SCORE:
-            expr.append(MovementType.EYEBROWS_UP)
+            expr.append(ExpressionType.EYEBROWS_UP)
         elif brow_down > self.EYEBROW_DOWN_SCORE:
-            expr.append(MovementType.EYEBROWS_DOWN)
+            expr.append(ExpressionType.EYEBROWS_DOWN)
 
         # Unused - not user friendly
         # gaze_left = (scores.get("eyeLookOutLeft", 0) + scores.get("eyeLookInRight", 0)) / 2

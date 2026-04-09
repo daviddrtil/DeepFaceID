@@ -1,5 +1,5 @@
 import random
-from interactive.action_enum import PoseType, OcclusionType, MovementType, ChallengeType, COMPLEX_ACTIONS, ACTION_SEQUENCES
+from interactive.action_enum import PoseType, OcclusionType, ExpressionType, ChallengeType, COMPLEX_ACTIONS, ACTION_SEQUENCES
 
 
 class ChallengeGenerator:
@@ -17,7 +17,7 @@ class ChallengeGenerator:
         seq_actions = random.sample(sequence.actions, len(sequence.actions))
         remaining = count - len(actions) - len(seq_actions)
         if remaining > 0:
-            all_single = list(PoseType) + list(OcclusionType) + list(MovementType)
+            all_single = list(PoseType) + list(OcclusionType) + list(ExpressionType)
             extras = random.sample(all_single, min(remaining, len(all_single)))
             actions.extend(extras)
 
