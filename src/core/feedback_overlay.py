@@ -174,18 +174,18 @@ class FeedbackOverlay:
 
         return current_y
 
-    def draw(self, frame, interactive_data, passive_state, overlay=None):
-        if settings.config.draw_face and interactive_data.face_result and interactive_data.face_result.face_landmarks:
-            self._draw_face(frame, interactive_data.face_result.face_landmarks[0])
+    def draw(self, frame, interactive_result, passive_result, overlay=None):
+        if settings.config.draw_face and interactive_result.face_result and interactive_result.face_result.face_landmarks:
+            self._draw_face(frame, interactive_result.face_result.face_landmarks[0])
 
-        if settings.config.draw_hands and interactive_data.hand_result and interactive_data.hand_result.hand_landmarks:
-            self._draw_hands(frame, interactive_data.hand_result.hand_landmarks, interactive_data.hand_mask)
+        if settings.config.draw_hands and interactive_result.hand_result and interactive_result.hand_result.hand_landmarks:
+            self._draw_hands(frame, interactive_result.hand_result.hand_landmarks, interactive_result.hand_mask)
 
         TOP_OFFSET = 30
         self._draw_action_overlay(frame, overlay, TOP_OFFSET)
         if settings.config.debug_mode:
-            passive_score = passive_state.score_cur if passive_state else None
+            passive_score = passive_result.score_cur if passive_result else None
             new_top_offset = self._draw_passive_data(frame, passive_score, TOP_OFFSET)
-            self._draw_interactive_data(frame, interactive_data.actions, new_top_offset)
+            self._draw_interactive_data(frame, interactive_result.actions, new_top_offset)
 
         return frame

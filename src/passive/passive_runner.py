@@ -68,45 +68,42 @@ class TemporalAnalyzer:
 
 class PassiveRunner:
     def __init__(self):
-        self.spatial = AnalyzerWorker(SpatialAnalyzer(), queue_size=4)
+        self.spatial = AnalyzerWorker(SpatialAnalyzer(), queue_size=4)       # TODO: AnalyzerWorker should be base class for each analyzer, should have detector and and run/predict method, also it should be renamed to PassiveAnalyzer
         self.frequency = AnalyzerWorker(FrequencyAnalyzer(), queue_size=4)
         self.temporal = AnalyzerWorker(TemporalAnalyzer(), queue_size=16)
-        self._cached_state = None
+        self._workers = (self.spatial, self.frequency, self.temporal)
 
     def start(self):
-        self.spatial.start()
-        self.frequency.start()
-        self.temporal.start()
+        for worker in self._workers:
+            worker.start()
 
     def submit(self, passive_input):
-        self.spatial.submit(passive_input)
-        self.frequency.submit(passive_input)
-        self.temporal.submit(passive_input)
+        for worker in self._workers:
+            worker.submit(passive_input)
 
-    def get_passive_state(self):
+    def get_passive_result(self):
+        # TODO: pass directly AnalyzerResult, this can be refactored
         s_score, s_frame, s_avg, s_count = self.spatial.get_all()
         f_score, f_frame, f_avg, f_count = self.frequency.get_all(ref_frame=s_frame)
         t_score, t_frame, t_avg, t_count = self.temporal.get_all(ref_frame=s_frame)
-        self._cached_state = PassiveResult(
+        return PassiveResult(
             spatial=AnalyzerResult(s_score, s_frame, s_avg, s_count),
             frequency=AnalyzerResult(f_score, f_frame, f_avg, f_count),
             temporal=AnalyzerResult(t_score, t_frame, t_avg, t_count),
         )
-        return self._cached_state
 
     def stop(self):
-        self.spatial.stop()
-        self.frequency.stop()
-        self.temporal.stop()
+        for worker in self._workers:
+            worker.stop()
 
-        state = self._cached_state
-        if state:
-            s = f"{state.spatial.avg_score:.4f}" if state.spatial.avg_score else "N/A"
-            f = f"{state.frequency.avg_score:.4f}" if state.frequency.avg_score else "N/A"
-            t = f"{state.temporal.avg_score:.4f}" if state.temporal.avg_score else "N/A"
+        result = self.get_passive_result()
+        if result:
+            s = f"{result.spatial.avg_score:.4f}" if result.spatial.avg_score else "N/A"
+            f = f"{result.frequency.avg_score:.4f}" if result.frequency.avg_score else "N/A"
+            t = f"{result.temporal.avg_score:.4f}" if result.temporal.avg_score else "N/A"
             print(
                 f"Average passive scores: "
-                f"spatial={s}({state.spatial.total_count}) | "
-                f"frequency={f}({state.frequency.total_count}) | "
-                f"temporal={t}({state.temporal.total_count})"
+                f"spatial={s}({result.spatial.total_count}) | "
+                f"frequency={f}({result.frequency.total_count}) | "
+                f"temporal={t}({result.temporal.total_count})"
             )

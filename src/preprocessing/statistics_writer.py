@@ -17,8 +17,8 @@ class StatisticsWriter:
     def _to_score_text(value):
         return "None  " if value is None else f"{value:.4f}"
 
-    def write_frame(self, frame_count, interactive_data, passive_state, current_action=None):
-        actions = interactive_data.actions
+    def write_frame(self, frame_count, interactive_result, passive_result, current_action=None):
+        actions = interactive_result.actions
         yaw = actions.get("yaw")
         pitch = actions.get("pitch")
         roll = actions.get("roll")
@@ -31,15 +31,15 @@ class StatisticsWriter:
 
         p_cur, p_avg, p_s, p_f, p_t = "None  ", "None  ", "None  ", "None  ", "None  "
         s_frame, f_frame, t_frame = 0, 0, 0
-        if passive_state is not None:
-            p_cur = self._to_score_text(passive_state.score_cur)
-            p_avg = self._to_score_text(passive_state.score_avg)
-            p_s = self._to_score_text(passive_state.spatial.current_score)
-            p_f = self._to_score_text(passive_state.frequency.current_score)
-            p_t = self._to_score_text(passive_state.temporal.current_score)
-            s_frame = passive_state.spatial.current_frame
-            f_frame = passive_state.frequency.current_frame
-            t_frame = passive_state.temporal.current_frame
+        if passive_result is not None:
+            p_cur = self._to_score_text(passive_result.score_cur)
+            p_avg = self._to_score_text(passive_result.score_avg)
+            p_s = self._to_score_text(passive_result.spatial.current_score)
+            p_f = self._to_score_text(passive_result.frequency.current_score)
+            p_t = self._to_score_text(passive_result.temporal.current_score)
+            s_frame = passive_result.spatial.current_frame
+            f_frame = passive_result.frequency.current_frame
+            t_frame = passive_result.temporal.current_frame
 
         action_text = get_action_name(current_action) or "None"
 
@@ -55,16 +55,16 @@ class StatisticsWriter:
         )
         self.file.flush()
 
-    def write_summary(self, passive_state, final_decision=None, deepfake_label=None):
+    def write_summary(self, passive_result, final_decision=None, deepfake_label=None):
         self.file.write("\n--- SUMMARY ---\n")
-        if passive_state:
-            s = f"{passive_state.spatial.avg_score:.4f}" if passive_state.spatial.avg_score else "N/A"
-            f = f"{passive_state.frequency.avg_score:.4f}" if passive_state.frequency.avg_score else "N/A"
-            t = f"{passive_state.temporal.avg_score:.4f}" if passive_state.temporal.avg_score else "N/A"
+        if passive_result:
+            s = f"{passive_result.spatial.avg_score:.4f}" if passive_result.spatial.avg_score else "N/A"
+            f = f"{passive_result.frequency.avg_score:.4f}" if passive_result.frequency.avg_score else "N/A"
+            t = f"{passive_result.temporal.avg_score:.4f}" if passive_result.temporal.avg_score else "N/A"
             self.file.write(
-                f"Average passive scores: spatial={s}({passive_state.spatial.total_count}) "
-                f"frequency={f}({passive_state.frequency.total_count}) "
-                f"temporal={t}({passive_state.temporal.total_count})\n"
+                f"Average passive scores: spatial={s}({passive_result.spatial.total_count}) "
+                f"frequency={f}({passive_result.frequency.total_count}) "
+                f"temporal={t}({passive_result.temporal.total_count})\n"
             )
         self.file.write(f"label={deepfake_label or 'unknown'}\n")
         self.file.write(f"final_decision={final_decision or 'unknown'}\n")
