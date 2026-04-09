@@ -1,5 +1,36 @@
+from dataclasses import dataclass, field
 import numpy as np
 from interactive.action_detector import ActionDetector
+
+
+def _default_actions():
+    return {
+        "pose": [],
+        "occlusions": [],
+        "expressions": [],
+        "yaw": None,
+        "pitch": None,
+        "roll": None,
+        "face_detected": False,
+        "hand_detected": False,
+        "hand_face_overlap": False,
+    }
+
+
+@dataclass
+class InteractiveFrameData:
+    face_result: object = None
+    hand_result: object = None
+    actions: dict = field(default_factory=_default_actions)
+    hand_mask: object = None
+    completed_action: object = None
+    challenge_progress: float = 0.0
+
+    @staticmethod
+    def empty(frame):
+        h, w = frame.shape[:2]
+        hand_mask = None if h == 0 or w == 0 else np.zeros((h, w), dtype=np.uint8)
+        return InteractiveFrameData(hand_mask=hand_mask)
 
 
 class InteractiveRunner:
@@ -21,37 +52,19 @@ class InteractiveRunner:
                 current_action,
                 challenge_timer,
             )
-            self.last_result = {
-                "face_result": face_result,
-                "hand_result": hand_result,
-                "actions": actions,
-                "hand_mask": hand_mask,
-                "completed_action": completed_action,
-                "challenge_progress": challenge_progress,
-            }
+            self.last_result = InteractiveFrameData(
+                face_result=face_result,
+                hand_result=hand_result,
+                actions=actions,
+                hand_mask=hand_mask,
+                completed_action=completed_action,
+                challenge_progress=challenge_progress,
+            )
         elif self.last_result is not None:
-            self.last_result["completed_action"] = None
+            self.last_result.completed_action = None
 
         if self.last_result is None:
-            h, w = frame.shape[:2]
-            return {
-                "face_result": None,
-                "hand_result": None,
-                "actions": {
-                    "pose": [],
-                    "occlusions": [],
-                    "expressions": [],
-                    "yaw": None,
-                    "pitch": None,
-                    "roll": None,
-                    "face_detected": False,
-                    "hand_detected": False,
-                    "hand_face_overlap": False,
-                },
-                "hand_mask": None if h == 0 or w == 0 else np.zeros((h, w), dtype=np.uint8),
-                "completed_action": None,
-                "challenge_progress": 0.0,
-            }
+            return InteractiveFrameData.empty(frame)
 
         return self.last_result
 

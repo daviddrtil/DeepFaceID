@@ -5,7 +5,7 @@ from mediapipe.framework.formats import landmark_pb2
 from PIL import Image, ImageDraw, ImageFont
 from interactive.metric_calculators import MetricCalculators
 from interactive.action_enum import get_action_name
-from passive import passive_runner
+from core.decision_logic import DecisionLogic
 import settings
 
 
@@ -138,7 +138,7 @@ class FeedbackOverlay:
     def _draw_passive_data(self, frame, passive_score, top_text_offset):
         current_y = top_text_offset
         if passive_score is not None:
-            text_color = (0, 0, 255) if passive_score > passive_runner.DEEPFAKE_SCORE_THRESHOLD else (0, 255, 0)
+            text_color = (0, 0, 255) if passive_score > DecisionLogic.DEEPFAKE_SCORE_THRESHOLD else (0, 255, 0)
             current_y = self._draw_text_line(frame, f"Passive Score: {passive_score * 100:.1f} %", text_color, top_text_offset)
         return current_y
 
@@ -174,17 +174,18 @@ class FeedbackOverlay:
 
         return current_y
 
-    def draw(self, frame, face_result, hand_result, actions, hand_mask, passive_score, overlay=None):
-        if settings.config.draw_face and face_result and face_result.face_landmarks:
-            self._draw_face(frame, face_result.face_landmarks[0])
+    def draw(self, frame, interactive_data, passive_state, overlay=None):
+        if settings.config.draw_face and interactive_data.face_result and interactive_data.face_result.face_landmarks:
+            self._draw_face(frame, interactive_data.face_result.face_landmarks[0])
 
-        if settings.config.draw_hands and hand_result and hand_result.hand_landmarks:
-            self._draw_hands(frame, hand_result.hand_landmarks, hand_mask)
+        if settings.config.draw_hands and interactive_data.hand_result and interactive_data.hand_result.hand_landmarks:
+            self._draw_hands(frame, interactive_data.hand_result.hand_landmarks, interactive_data.hand_mask)
 
         TOP_OFFSET = 30
         self._draw_action_overlay(frame, overlay, TOP_OFFSET)
         if settings.config.debug_mode:
+            passive_score = passive_state.score_cur if passive_state else None
             new_top_offset = self._draw_passive_data(frame, passive_score, TOP_OFFSET)
-            self._draw_interactive_data(frame, actions, new_top_offset)
+            self._draw_interactive_data(frame, interactive_data.actions, new_top_offset)
 
         return frame

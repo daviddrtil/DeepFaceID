@@ -1,16 +1,19 @@
-from passive import passive_runner
-
 class DecisionLogic:
-    def fuse(self, interactive_actions, passive_score_avg, current_action, actions_completed_count, actions_count, timeout_failed=False):
+    DEEPFAKE_SCORE_THRESHOLD = 0.50
+
+    def fuse(self, passive_state, actions_completed_count, actions_count, timeout_failed=False):
+        passive_score_avg = passive_state.score_avg if passive_state else None
+        passive_ok = passive_score_avg is not None and passive_score_avg <= self.DEEPFAKE_SCORE_THRESHOLD
+
         if timeout_failed:
             return {
                 'status': 'fail',
                 'display_status': 'Action Timeout',
-                'passive_ok': passive_score_avg is not None and passive_score_avg <= passive_runner.DEEPFAKE_SCORE_THRESHOLD,
+                'passive_ok': passive_ok,
                 'interactive_complete': False,
+                'passive': passive_state,
             }
 
-        passive_ok = passive_score_avg is not None and passive_score_avg <= passive_runner.DEEPFAKE_SCORE_THRESHOLD
         interactive_complete = actions_count > 0 and actions_completed_count >= actions_count
         if passive_ok and interactive_complete:
             status = 'pass'
@@ -27,4 +30,5 @@ class DecisionLogic:
             'display_status': display_status,
             'passive_ok': passive_ok,
             'interactive_complete': interactive_complete,
+            'passive': passive_state,
         }

@@ -1,119 +1,121 @@
-from collections import deque
 import random
 import torch
 import time
+from dataclasses import dataclass
 
 from passive.analyzer_worker import AnalyzerWorker
 from passive.spatial_analyzer.ucf_detector import UCFDetector
-from passive.passive_score_aggregator import PassiveScoreAggregator
 
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-DEEPFAKE_SCORE_THRESHOLD = 0.50
-SMOOTHING_WINDOW = 5
+WEIGHTS = {'spatial': 1.0, 'frequency': 0.0, 'temporal': 0.0}
+
+
+@dataclass
+class AnalyzerResult:
+    current_score: float = None
+    current_frame: int = 0
+    avg_score: float = None
+    total_count: int = 0
+
+
+@dataclass
+class PassiveState:
+    spatial: AnalyzerResult
+    frequency: AnalyzerResult
+    temporal: AnalyzerResult
+    score_cur: float = None
+    score_avg: float = None
+
+    def __post_init__(self):
+        self.score_cur = self._weighted('current_score')
+        self.score_avg = self._weighted('avg_score')
+
+    def _weighted(self, attr):
+        total, weight = 0.0, 0.0
+        for key, w in WEIGHTS.items():
+            score = getattr(getattr(self, key), attr)
+            if score is not None:
+                total += score * w
+                weight += w
+        return total / weight if weight else None
 
 
 class SpatialAnalyzer:
     def __init__(self):
         self.detector = UCFDetector(DEVICE)
-        self.recent_scores = deque(maxlen=SMOOTHING_WINDOW)
 
     def run(self, passive_input):
-        input_tensor = passive_input.get("passive_face_input")
-        if input_tensor is None:
-            return None
-        raw_score = self.detector.predict(input_tensor.to(DEVICE))
-        return raw_score
-        # self.recent_scores.append(float(raw_score))   # TODO: consider using SMOOTHING_WINDOW
-        # return float(sum(self.recent_scores) / len(self.recent_scores))
+        tensor = passive_input.get("passive_face_input")
+        return self.detector.predict(tensor.to(DEVICE)) if tensor is not None else None
 
 
 class FrequencyAnalyzer:
     def run(self, passive_input):
-        # fps = random.uniform(10, 20)
-        # time.sleep(1.0 / fps)
+        fps = random.uniform(100, 200)
+        time.sleep(1.0 / fps)
         return random.uniform(0.4, 0.6)
 
 
 class TemporalAnalyzer:
     def run(self, passive_input):
-        # fps = random.uniform(5, 10)
-        # time.sleep(1.0 / fps)
+        fps = random.uniform(50, 100)
+        time.sleep(1.0 / fps)
         return random.uniform(0.4, 0.6)
 
 
 class PassiveRunner:
     def __init__(self):
-        self.spatial_worker = AnalyzerWorker(SpatialAnalyzer(), queue_size=4)
-        self.frequency_worker = AnalyzerWorker(FrequencyAnalyzer(), queue_size=4)
-        self.temporal_worker = AnalyzerWorker(TemporalAnalyzer(), queue_size=16)
-        self.score_aggregator = PassiveScoreAggregator()
-
-        self.latest_result = None
-        self.last_frame_counts = (None, None, None)
-
-        self.score_count = 0
-        self.sum_spatial_score = 0.0
-        self.sum_frequency_score = 0.0
-        self.sum_temporal_score = 0.0
-        self.sum_aggregated_score = 0.0
+        self.spatial = AnalyzerWorker(SpatialAnalyzer(), queue_size=4)
+        self.frequency = AnalyzerWorker(FrequencyAnalyzer(), queue_size=4)
+        self.temporal = AnalyzerWorker(TemporalAnalyzer(), queue_size=16)
+        self._cached_state = None
 
     def start(self):
-        self.spatial_worker.start()
-        self.frequency_worker.start()
-        self.temporal_worker.start()
+        self.spatial.start()
+        self.frequency.start()
+        self.temporal.start()
 
     def submit(self, passive_input):
-        self.spatial_worker.submit(passive_input)
-        self.frequency_worker.submit(passive_input)
-        self.temporal_worker.submit(passive_input)
+        self.spatial.submit(passive_input)
+        self.frequency.submit(passive_input)
+        self.temporal.submit(passive_input)
 
-    def get_latest_result(self):
-        results = (
-            self.spatial_worker.get_latest(),
-            self.frequency_worker.get_latest(),
-            self.temporal_worker.get_latest()
+    def get_passive_state(self):
+        s_score, s_frame, s_avg, s_count = self.spatial.get_all()
+        if s_score is None:
+            return self._cached_state
+
+        f_score, f_frame, f_avg, f_count = self.frequency.get_all(ref_frame=s_frame)
+        t_score, t_frame, t_avg, t_count = self.temporal.get_all(ref_frame=s_frame)
+
+        self._cached_state = PassiveState(
+            spatial=AnalyzerResult(s_score, s_frame, s_avg, s_count),
+            frequency=AnalyzerResult(f_score, f_frame, f_avg, f_count),
+            temporal=AnalyzerResult(t_score, t_frame, t_avg, t_count),
         )
-        if None in results:
-            return self.latest_result
+        return self._cached_state
 
-        current_counts = tuple(result["frame_count"] for result in results)
-        if current_counts == self.last_frame_counts:
-            return self.latest_result
-
-        s, f, t = (result["score"] for result in results)
-        self.sum_spatial_score += s
-        self.sum_frequency_score += f
-        self.sum_temporal_score += t
-        self.last_frame_counts = current_counts
-        self.score_count += 1
-
-        score_raw = self.score_aggregator.run(s, f, t)
-        self.sum_aggregated_score += score_raw
-        score_avg = self.sum_aggregated_score / self.score_count
-
-        self.latest_result = {
-            "score_raw": score_raw,
-            "score_avg": score_avg,
-            "spatial": s,
-            "frequency": f,
-            "temporal": t,
-            "frame_count": current_counts[0]
+    def get_score_buffer(self):
+        return {
+            "spatial": self.spatial.get_score_buffer(),
+            "frequency": self.frequency.get_score_buffer(),
+            "temporal": self.temporal.get_score_buffer(),
         }
-        return self.latest_result
 
     def stop(self):
-        self.spatial_worker.stop()
-        self.frequency_worker.stop()
-        self.temporal_worker.stop()
+        self.spatial.stop()
+        self.frequency.stop()
+        self.temporal.stop()
 
-        if not self.score_count:
-            print("Average passive scores: spatial=N/A frequency=N/A temporal=N/A")
-            return
-
-        print(
-            f"Average passive scores: "
-            f"spatial={self.sum_spatial_score / self.score_count:.4f} "
-            f"frequency={self.sum_frequency_score / self.score_count:.4f} "
-            f"temporal={self.sum_temporal_score / self.score_count:.4f}"
-        )
+        state = self._cached_state
+        if state:
+            s = f"{state.spatial.avg_score:.4f}" if state.spatial.avg_score else "N/A"
+            f = f"{state.frequency.avg_score:.4f}" if state.frequency.avg_score else "N/A"
+            t = f"{state.temporal.avg_score:.4f}" if state.temporal.avg_score else "N/A"
+            print(
+                f"Average passive scores: "
+                f"spatial={s}({state.spatial.total_count}) | "
+                f"frequency={f}({state.frequency.total_count}) | "
+                f"temporal={t}({state.temporal.total_count})"
+            )

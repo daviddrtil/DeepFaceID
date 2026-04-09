@@ -1,4 +1,3 @@
-from collections import deque
 import time
 import queue
 
@@ -34,8 +33,7 @@ class LivenessDetectionEngine:
 
         self._last_frame_count = None
         self._last_output_frame_count = None
-        self.render_buffer = deque()
-        self.delay_frames = 0 if not hasattr(video_input, 'is_live') else (5 if video_input.is_live else 0)
+        self._latest_passive_state = None
         self.final_status = None
         self._video_writer_initialized = False
 
@@ -63,82 +61,67 @@ class LivenessDetectionEngine:
 
                 self._init_video_writer(frame)
                 preprocessed = self.preprocessor.process_frame(frame, timestamp_ms, frame_count, self.video_input.fps)
-                
                 self._last_frame_count = frame_count
 
                 current_action = self.challenge_generator.get_current_action()
                 interactive_data = self.interactive_runner.process_frame(preprocessed, current_action, self.challenge_timer)
 
-                preprocessed_passive = self.preprocessor.prepare_passive_input(preprocessed, interactive_data["face_result"])
+                preprocessed_passive = self.preprocessor.prepare_passive_input(preprocessed, interactive_data.face_result)
                 if preprocessed_passive.get("passive_face_input") is not None:
                     self.passive_runner.submit(preprocessed_passive)
 
-                if interactive_data['completed_action'] is not None:
+                if interactive_data.completed_action is not None:
                     self.challenge_generator.mark_current_completed()
                     self.challenge_timer.reset()
 
-                self.render_buffer.append({
-                    'frame_count': frame_count,
-                    'preprocessed': preprocessed,
-                    'interactive_data': interactive_data,
-                    'current_action': self.challenge_generator.get_current_action(),
-                    'actions_completed_count': self.challenge_generator.completed_count(),
-                    'actions_count': self.challenge_generator.total_actions(),
-                    'timeout_failed': self.challenge_timer.failed and not self.challenge_generator.is_finished()
-                })
-
-                if len(self.render_buffer) < self.delay_frames:
-                    # delayed rendering to synchronize passive module
-                    if self.web_output and self.video_input.is_live:
-                        self._send_web_overlay(interactive_data, current_action, None)
-                    continue
-
-                delayed_data = self.render_buffer.popleft()
-                decision = self._process_delayed_frame(delayed_data)
-                d_frame_count = delayed_data['frame_count']
-
-                passive_result = self.passive_runner.get_latest_result()
-                passive_score_raw = passive_result["score_raw"] if passive_result else None
-                passive_score_avg = passive_result["score_avg"] if passive_result else None
-                passive_delay_frames = d_frame_count - passive_result["frame_count"] if passive_result else 0
-
+                decision_action = self.challenge_generator.get_current_action()
+                actions_completed = self.challenge_generator.completed_count()
+                actions_total = self.challenge_generator.total_actions()
+                timeout_failed = self.challenge_timer.failed and not self.challenge_generator.is_finished()
+                decision = self._process_frame(frame_count, preprocessed, interactive_data, decision_action, actions_completed, actions_total, timeout_failed)
+                passive_state = decision.get('passive')
+                spatial_frame = passive_state.spatial.current_frame if passive_state else 0
+                passive_delay = frame_count - spatial_frame if passive_state else 0
                 if decision['status'] in ('pass', 'fail'):
                     self.final_status = decision
                     if self.video_input.is_live:
                         break
 
-                if processed_count % 10 == 0:
+                if frame_count % 30 == 0:
                     elapsed = time.time() - start_time
-                    current_fps = processed_count / elapsed if elapsed > 0 else 0
-                    passive_raw_pct = f"{passive_score_raw * 100:2.0f}%" if passive_score_raw is not None else "N/A"
-                    passive_avg_pct = f"{passive_score_avg * 100:2.0f}%" if passive_score_avg is not None else "N/A"
-                    print(f"frame={processed_count:04d} fps={current_fps:2.0f} passive_raw={passive_raw_pct} passive_avg={passive_avg_pct} delay={passive_delay_frames}")
+                    fps = processed_count / elapsed if elapsed > 0 else 0
+                    p_cur = passive_state.score_cur if passive_state else None
+                    p_avg = passive_state.score_avg if passive_state else None
+                    cur_pct = f"{p_cur * 100:2.0f}%" if p_cur is not None else "N/A"
+                    avg_pct = f"{p_avg * 100:2.0f}%" if p_avg is not None else "N/A"
+                    print(f"frame={frame_count:04d} fps={fps:2.0f} passive_current={cur_pct} passive_avg={avg_pct} delay={passive_delay}")
 
                 processed_count += 1
         finally:
-            self._flush_render_buffer()
+            final_decision = self.final_status['status'] if self.final_status else None
+            self.statistics_writer.write_summary(self._latest_passive_state, final_decision, settings.config.deepfake_label)
             self.statistics_writer.close()
             self.video_input.stop()
             self.passive_runner.stop()
             self.interactive_runner.stop()
             self._stop_outputs()
-            print(f"Processed {processed_count} frames in {time.time() - start_time:.1f} seconds.")
+            print(f"Total {self._last_frame_count} frames (interactive processed: {processed_count} frames) in {time.time() - start_time:.1f}s")
 
-    def _send_web_overlay(self, interactive_data, action, decision, completed=0, total=0, overlay=None):
+    def _send_web_overlay(self, interactive_data, action, decision, completed=0, total=0, overlay=None, passive_score=None):
         if not self.web_output:
             return
-
         result = {
             'type': 'result',
             'action': get_action_name(action),
-            'progress': interactive_data['challenge_progress'],
+            'progress': interactive_data.challenge_progress,
             'completed': completed,
             'total': total,
             'status': decision['status'] if decision else 'pending',
             'status_text': decision['display_status'] if decision else f'{completed}/{total} actions completed',
-            'face_detected': interactive_data['actions'].get('face_detected', False),
+            'face_detected': interactive_data.actions.get('face_detected', False),
             'completed_action': overlay.get('completed_action') if overlay else None,
-            'final': decision is not None and decision['status'] in ('pass', 'fail')
+            'final': decision is not None and decision['status'] in ('pass', 'fail'),
+            'passive_score': passive_score,
         }
         self.web_output.put_overlay(result)
 
@@ -167,78 +150,37 @@ class LivenessDetectionEngine:
         self._video_writer_initialized = True
         print(f"VideoWriter initialized: {width}x{height} at {self.video_input.fps:.0f} fps")
 
-    def _flush_render_buffer(self):
-        while len(self.render_buffer) > 0:
-            delayed_data = self.render_buffer.popleft()
-            self._process_delayed_frame(delayed_data)
-
-    def _process_delayed_frame(self, delayed_data):
-        d_frame_count = delayed_data['frame_count']
-        d_preprocessed = delayed_data['preprocessed']
-        d_interactive = delayed_data['interactive_data']
-        d_action = delayed_data['current_action']
-        d_completed = delayed_data['actions_completed_count']
-        d_total = delayed_data['actions_count']
-        d_timeout = delayed_data['timeout_failed']
-
-        passive_result = self.passive_runner.get_latest_result()
-
-        passive_score_raw = None
-        passive_score_avg = None
-        passive_delay_frames = 0
-        if passive_result is not None:
-            passive_score_raw = passive_result["score_raw"]
-            passive_score_avg = passive_result["score_avg"]
-            passive_delay_frames = d_frame_count - passive_result["frame_count"]
-
-        decision = self.decision_logic.fuse(
-            d_interactive['actions'],
-            passive_score_avg,
-            d_action,
-            d_completed,
-            d_total,
-            d_timeout,
-        )
-
+    def _process_frame(self, frame_count, preprocessed, interactive_data, action, completed, total, timeout_failed):
+        passive_state = self.passive_runner.get_passive_state()
+        if passive_state is not None:
+            self._latest_passive_state = passive_state
+        decision = self.decision_logic.fuse(passive_state, completed, total, timeout_failed)
+        passive_score_avg = passive_state.score_avg if passive_state else None
+        passive_delay_frames = frame_count - passive_state.spatial.current_frame if passive_state else 0
         overlay = {
-            'current_action': d_action,
-            'challenge_progress': d_interactive['challenge_progress'],
-            'challenge_completed': d_completed,
-            'challenge_total': d_total,
-            'completed_action': d_interactive['completed_action'],
+            'current_action': action,
+            'challenge_progress': interactive_data.challenge_progress,
+            'challenge_completed': completed,
+            'challenge_total': total,
+            'completed_action': interactive_data.completed_action,
             'decision': decision['status'],
             'decision_text': decision['display_status'],
             'passive_delay': passive_delay_frames,
         }
-
-        rendered = self.feedback_overlay.draw(
-            d_preprocessed['frame'],
-            d_interactive['face_result'],
-            d_interactive['hand_result'],
-            d_interactive['actions'],
-            d_interactive['hand_mask'],
-            passive_score_raw,
-            overlay,
-        )
-
+        rendered = self.feedback_overlay.draw(preprocessed['frame'], interactive_data, passive_state, overlay)
         action_message = overlay.get('completed_action')
-        
-        # For live video, fill in missing frames to maintain correct FPS
+
         if self.video_input.is_live and self._last_output_frame_count is not None:
-            frames_skipped = d_frame_count - self._last_output_frame_count - 1
+            frames_skipped = frame_count - self._last_output_frame_count - 1
             if frames_skipped > 0:
                 for module in self.output_modules:
                     if isinstance(module, VideoWriter):
                         module.put_repeated_frames(frames_skipped)
-        
         for module in self.output_modules:
-            module.put_frame(rendered, d_frame_count, action_message)
-        
-        self._last_output_frame_count = d_frame_count
+            module.put_frame(rendered, frame_count, action_message)
 
-        self.statistics_writer.write_frame(d_frame_count, d_interactive, passive_result)
-
+        self._last_output_frame_count = frame_count
+        self.statistics_writer.write_frame(frame_count, interactive_data, passive_state, action)
         if self.web_output:
-            self._send_web_overlay(d_interactive, d_action, decision, d_completed, d_total, overlay)
-
+            self._send_web_overlay(interactive_data, action, decision, completed, total, overlay, passive_score_avg)
         return decision
