@@ -1,12 +1,21 @@
 import queue
 import threading
+from abc import ABC, abstractmethod
 from collections import OrderedDict
+from dataclasses import dataclass
 from preprocessing.live_video_queue import LiveVideoQueue
 
 
-class AnalyzerWorker:
-    def __init__(self, analyzer, queue_size):
-        self.analyzer = analyzer
+@dataclass
+class AnalyzerResult:
+    current_score: float = None
+    current_frame: int = 0
+    avg_score: float = None
+    total_count: int = 0
+
+
+class PassiveAnalyzer(ABC):
+    def __init__(self, queue_size):
         self.input_queue = LiveVideoQueue(maxsize=queue_size)
         self.latest_score = None
         self.latest_frame = None
@@ -16,6 +25,10 @@ class AnalyzerWorker:
         self.lock = threading.Lock()
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.stop_event = threading.Event()
+
+    @abstractmethod
+    def predict(self, passive_input):
+        ...
 
     def start(self):
         self.thread.start()
@@ -30,7 +43,7 @@ class AnalyzerWorker:
             except queue.Empty:
                 continue
 
-            score = self.analyzer.run(frame_data)
+            score = self.predict(frame_data)
             if score is not None:
                 frame_count = frame_data.get("frame_count")
                 with self.lock:
@@ -41,7 +54,7 @@ class AnalyzerWorker:
                     self.score_sum += score
                     self.score_count += 1
 
-    def get_all(self, ref_frame=None):
+    def get_result(self, ref_frame=None):
         with self.lock:
             if ref_frame is not None:
                 selected_frame, selected_score = None, None
@@ -53,7 +66,7 @@ class AnalyzerWorker:
             else:
                 score, frame = self.latest_score, self.latest_frame
             avg = (self.score_sum / self.score_count) if self.score_count else None
-            return score, frame or 0, avg, self.score_count
+            return AnalyzerResult(score, frame or 0, avg, self.score_count)
 
     def get_score_buffer(self):
         with self.lock:
