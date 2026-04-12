@@ -25,6 +25,7 @@ class WebSocketInput(VideoInput):
             self.start_time = time.time()
             self.width = width
             self.height = height
+            self.connected.set()
             print(f"WebSocket Input: {width}x{height} at {self.fps:.0f} fps")
         timestamp_ms = int((time.time() - self.start_time) * 1000)
         self.queue.put_latest((frame, timestamp_ms, self.frame_count))
@@ -46,6 +47,7 @@ class WebSocketInput(VideoInput):
         self.start_time = None
         self.width = None
         self.height = None
+        self.connected.clear()
         self.stop_event.clear()
         while not self.queue.empty():
             try:

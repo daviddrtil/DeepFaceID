@@ -139,7 +139,7 @@ class FeedbackOverlay:
         current_y = top_text_offset
         if passive_score is not None:
             text_color = (0, 0, 255) if passive_score > DecisionLogic.DEEPFAKE_SCORE_THRESHOLD else (0, 255, 0)
-            current_y = self._draw_text_line(frame, f"Passive Score: {passive_score * 100:.1f} %", text_color, top_text_offset)
+            current_y = self._draw_text_line(frame, f"Deepfake Score: {passive_score * 100:.0f} %", text_color, top_text_offset)
         return current_y
 
     def _get_action_progress(self, overlay):
@@ -184,7 +184,7 @@ class FeedbackOverlay:
         TOP_OFFSET = 30
         self._draw_action_overlay(frame, overlay, TOP_OFFSET)
         if settings.config.debug_mode:
-            passive_score = passive_result.score_cur if passive_result else None
+            passive_score = passive_result.score_smooth if passive_result else None
             new_top_offset = self._draw_passive_data(frame, passive_score, TOP_OFFSET)
             self._draw_interactive_data(frame, interactive_result.actions, new_top_offset)
 

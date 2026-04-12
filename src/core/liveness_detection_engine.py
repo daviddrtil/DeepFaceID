@@ -16,7 +16,7 @@ from preprocessing.video_input import EndOfStreamError
 
 
 class LivenessDetectionEngine:
-    def __init__(self, video_input, output_modules, stop_event, web_output):
+    def __init__(self, video_input, output_modules, stop_event, web_output=None):
         self.video_input = video_input
         self.output_modules = list(output_modules)
         self.stop_event = stop_event
@@ -38,10 +38,41 @@ class LivenessDetectionEngine:
         self.final_status = None
         self._video_writer_initialized = False
 
+    def _init_video_writer(self, frame):
+        if self._video_writer_initialized or not self.video_input.is_live:
+            return
+        if not settings.config.save_output:
+            self._video_writer_initialized = True
+            return
+        height, width = frame.shape[:2]
+        writer = VideoWriter(
+            width=width,
+            height=height,
+            fps=self.video_input.fps,
+        )
+        writer.start()
+        self.output_modules.append(writer)
+        self._video_writer_initialized = True
+        print(f"VideoWriter initialized: {width}x{height} at {self.video_input.fps:.0f} fps")
+
+    def _wait_for_first_frame(self):
+        connected = getattr(self.video_input, 'connected', None)
+        if connected is None:
+            return True
+        while not self.stop_event.is_set():
+            if connected.wait(timeout=1.0):
+                return True
+        return False
+
     def run(self):
         self.video_input.print_video_info()
         self._start_outputs()
         self.video_input.start()
+
+        if self.video_input.is_live:
+            if not self._wait_for_first_frame():
+                return
+
         self.passive_runner.start()
 
         start_time = time.time()
@@ -114,11 +145,11 @@ class LivenessDetectionEngine:
             self._stop_outputs()
             print(f"Total {self._last_frame_count} frames (interactive processed: {processed_count} frames) in {time.time() - start_time:.1f}s")
 
-    def _send_web_overlay(self, interactive_result, action, decision, completed, total, overlay, passive_score):
+    def _send_web_overlay(self, interactive_result, passive_result, action, decision, completed, total, overlay):
         if not self.web_output:
             return
         result = {
-            'type': 'result',   # TODO: why do we need this?
+            'type': 'result',
             'action': get_action_name(action),
             'progress': interactive_result.challenge_progress,
             'completed': completed,
@@ -128,41 +159,16 @@ class LivenessDetectionEngine:
             'face_detected': interactive_result.actions.get('face_detected', False),
             'completed_action': overlay.get('completed_action') if overlay else None,
             'final': decision is not None and decision['status'] in ('pass', 'fail'),
-            'passive_score': passive_score,
+            'passive_score_avg': passive_result.score_avg if passive_result else None,
+            'passive_score_smooth': passive_result.score_smooth if passive_result else None,
         }
         self.web_output.put_overlay(result)
-
-    def _start_outputs(self):
-        for module in self.output_modules:
-            module.start()
-
-    def _stop_outputs(self):
-        for module in reversed(self.output_modules):
-            module.stop()
-
-    def _init_video_writer(self, frame):
-        if self._video_writer_initialized or not self.video_input.is_live:
-            return
-        if not settings.config.save_output:
-            self._video_writer_initialized = True
-            return
-        height, width = frame.shape[:2]
-        writer = VideoWriter(
-            width=width,
-            height=height,
-            fps=self.video_input.fps,
-        )
-        writer.start()
-        self.output_modules.append(writer)
-        self._video_writer_initialized = True
-        print(f"VideoWriter initialized: {width}x{height} at {self.video_input.fps:.0f} fps")
 
     def _process_frame(self, frame_count, preprocessed, interactive_result, action, completed, total, timeout_failed):
         passive_result = self.passive_runner.get_passive_result()
         if passive_result is not None:
             self._latest_passive_result = passive_result
         decision = self.decision_logic.fuse(passive_result, completed, total, timeout_failed)
-        passive_score_avg = passive_result.score_avg if passive_result else None
         passive_delay_frames = frame_count - passive_result.spatial.current_frame if passive_result else 0
         overlay = {
             'current_action': action,
@@ -189,5 +195,13 @@ class LivenessDetectionEngine:
         self._last_output_frame_count = frame_count
         self.statistics_writer.write_frame(frame_count, interactive_result, passive_result, action, completed, total)
         if self.web_output:
-            self._send_web_overlay(interactive_result, action, decision, completed, total, overlay, passive_score_avg)
+            self._send_web_overlay(interactive_result, passive_result, action, decision, completed, total, overlay)
         return decision
+
+    def _start_outputs(self):
+        for module in self.output_modules:
+            module.start()
+
+    def _stop_outputs(self):
+        for module in reversed(self.output_modules):
+            module.stop()

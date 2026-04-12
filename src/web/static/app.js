@@ -220,6 +220,36 @@ function drawOverlay() {
 
     const faceDetected = lastServerData ? lastServerData.face_detected : false;
     drawAlignmentCircle(faceDetected);
+    drawDeepfakeScore();
+}
+
+function drawDeepfakeScore() {
+    if (!lastServerData) return;
+    const score = lastServerData.passive_score_smooth;
+    if (score === undefined || score === null) return;
+
+    const pct = Math.round(score * 100);
+    const text = `Deepfake Score: ${pct} %`;
+    const w = overlay.width;
+    const fontSize = 28;
+
+    ctx.save();
+    ctx.scale(-1, 1);
+    ctx.translate(-w, 0);
+
+    ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+    const metrics = ctx.measureText(text);
+    const x = 20;
+    const y = 20 + fontSize;
+    const pad = 8;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(x - pad, y - fontSize - pad / 2, metrics.width + pad * 2, fontSize + pad * 2);
+
+    ctx.fillStyle = score > 0.5 ? '#ff4444' : '#00ff88';
+    ctx.fillText(text, x, y);
+
+    ctx.restore();
 }
 
 function drawAlignmentCircle(faceDetected) {
@@ -260,11 +290,11 @@ function showCompletion(data) {
     finalStatus.textContent = data.status_text;
     finalStatus.className = data.status;
 
-    const score = data.passive_score;
+    const score = data.passive_score_avg;
     if (score !== undefined && score !== null) {
         const pct = (score * 100).toFixed(0);
         const conf = score <= 0.5 ? 'Real' : 'Fake';
-        confidenceDisplay.textContent = `Score: ${pct}% (${conf})`;
+        confidenceDisplay.textContent = `Deepfake Score: ${pct}% (${conf})`;
         confidenceDisplay.className = `confidence-display ${score <= 0.5 ? 'real' : 'fake'}`;
     } else {
         confidenceDisplay.textContent = '';

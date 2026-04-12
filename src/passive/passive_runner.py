@@ -1,6 +1,7 @@
 import random
 import time
 import torch
+from collections import deque
 from dataclasses import dataclass
 from passive.passive_analyzer import PassiveAnalyzer, AnalyzerResult
 from passive.spatial_analyzer.ucf_detector import UCFDetector
@@ -17,6 +18,7 @@ class PassiveResult:
     temporal: AnalyzerResult
     score_cur: float = None
     score_avg: float = None
+    score_smooth: float = None
 
     def __post_init__(self):
         self.score_cur = self._weighted('current_score')
@@ -70,6 +72,7 @@ class PassiveRunner:
         self.frequency = FrequencyAnalyzer(queue_size=4)
         self.temporal = TemporalAnalyzer(queue_size=16)
         self._workers = (self.spatial, self.frequency, self.temporal)
+        self._score_window = deque(maxlen=30)    # smooth window
 
     def start(self):
         for worker in self._workers:
@@ -83,7 +86,12 @@ class PassiveRunner:
         spatial = self.spatial.get_result()
         frequency = self.frequency.get_result(ref_frame=spatial.current_frame)
         temporal = self.temporal.get_result(ref_frame=spatial.current_frame)
-        return PassiveResult(spatial=spatial, frequency=frequency, temporal=temporal)
+        result = PassiveResult(spatial=spatial, frequency=frequency, temporal=temporal)
+        if result.score_cur is not None:
+            self._score_window.append(result.score_cur)
+        if self._score_window:
+            result.score_smooth = sum(self._score_window) / len(self._score_window)
+        return result
 
     def stop(self):
         for worker in self._workers:
