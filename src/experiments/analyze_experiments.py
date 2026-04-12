@@ -7,7 +7,7 @@ _src_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_src_dir))
 
 from core.decision_logic import DecisionLogic
-from interactive.action_enum import PoseAction, OcclusionAction, ExpressionAction
+from interactive.action_enum import PoseAction, OcclusionAction, ExpressionAction, HoldStillAction
 import session_parser
 import draw_graphs
 
@@ -17,10 +17,12 @@ THRESHOLD = DecisionLogic.DEEPFAKE_SCORE_THRESHOLD
 _ACTION_CATEGORIES = (
     {a.value: 'pose' for a in PoseAction} |
     {a.value: 'occlusion' for a in OcclusionAction} |
-    {a.value: 'expression' for a in ExpressionAction}
+    {a.value: 'expression' for a in ExpressionAction} |
+    {HoldStillAction.value: 'calibration'}
 )
-CATEGORY_ORDER = ['pose', 'occlusion', 'expression', 'complex', 'sequence']
+CATEGORY_ORDER = ['calibration', 'pose', 'occlusion', 'expression', 'complex', 'sequence']
 CATEGORY_LABELS = {
+    'calibration': 'Hold Still (calibration)',
     'pose': 'Pose (head movement)',
     'occlusion': 'Occlusion (hand cover)',
     'expression': 'Expression (facial)',

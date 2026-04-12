@@ -1,13 +1,14 @@
 import cv2
 import numpy as np
 from mediapipe import solutions
-from interactive.action_enum import PoseAction, OcclusionAction, ExpressionAction
+from interactive.action_enum import PoseAction, OcclusionAction, ExpressionAction, HoldStillAction
 
 
 class MetricCalculators:
     YAW_THRESHOLD_DEG = 25
     PITCH_THRESHOLD_DEG = 20
     ROLL_THRESHOLD_DEG = 20
+    STILL_THRESHOLD_DEG = 20
 
     SINGLE_EYE_BLINK_SCORE = 0.4
     SMILE_SCORE = 0.4
@@ -179,6 +180,9 @@ class MetricCalculators:
 
     def _get_head_pose(self, yaw, pitch, roll):
         pose_actions = []
+        if abs(yaw) < self.STILL_THRESHOLD_DEG and abs(pitch) < self.STILL_THRESHOLD_DEG and abs(roll) < self.STILL_THRESHOLD_DEG:
+            pose_actions.append(HoldStillAction())
+
         if yaw >= self.YAW_THRESHOLD_DEG:
             pose_actions.append(PoseAction.MOVE_HEAD_RIGHT)
         elif yaw <= -self.YAW_THRESHOLD_DEG:

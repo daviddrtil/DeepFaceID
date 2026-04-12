@@ -27,6 +27,7 @@ class LivenessDetectionEngine:
         self.passive_runner = PassiveRunner()
         self.challenge_generator = ChallengeGenerator()
         self.challenge_timer = ChallengeTimer()
+        self.challenge_timer.reset(self.challenge_generator.get_current_action())
         self.decision_logic = DecisionLogic()
         self.feedback_overlay = FeedbackOverlay()
         self.statistics_writer = StatisticsWriter()
@@ -72,7 +73,7 @@ class LivenessDetectionEngine:
 
                 if interactive_result.completed_action is not None:
                     self.challenge_generator.mark_current_completed()
-                    self.challenge_timer.reset()
+                    self.challenge_timer.reset(self.challenge_generator.get_current_action())
 
                 decision_action = self.challenge_generator.get_current_action()
                 actions_completed = self.challenge_generator.completed_count()

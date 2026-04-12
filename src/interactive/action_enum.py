@@ -55,7 +55,17 @@ class ComplexAction:
         sorted_actions = sorted(self.actions, key=lambda a: a.value)
         self.name = " + ".join(a.value for a in sorted_actions)
 
-ChallengeType: TypeAlias = ActionType | ComplexAction
+@dataclass(frozen=True)
+class HoldStillAction:
+    # Used for detector calibration
+    duration_seconds: float = 2.0
+    name: str = field(init=False, default="Hold Still")
+
+    @property
+    def value(self):
+        return self.name
+
+ChallengeType: TypeAlias = ActionType | ComplexAction | HoldStillAction
 
 COMPLEX_ACTIONS = [
     ComplexAction({ExpressionAction.BLINK, ExpressionAction.SMILE}),
@@ -90,7 +100,7 @@ ACTION_SEQUENCES = [
 def get_action_name(action):
     if action is None:
         return None
-    if isinstance(action, (ComplexAction, SequenceAction)):
+    if isinstance(action, (ComplexAction, SequenceAction, HoldStillAction)):
         return action.name
     return action.value
 
@@ -98,14 +108,9 @@ def get_action_name(action):
 def get_action_category(action):
     if action is None:
         return None
-    if isinstance(action, PoseAction):
-        return 'pose'
-    if isinstance(action, OcclusionAction):
-        return 'occlusion'
-    if isinstance(action, ExpressionAction):
-        return 'expression'
-    if isinstance(action, ComplexAction):
-        return 'complex'
-    if isinstance(action, SequenceAction):
-        return 'sequence'
+    if isinstance(action, HoldStillAction):
+        return 'calibration'
+    name = type(action).__name__
+    if name.endswith('Action'):
+        return name.removesuffix('Action').lower()
     return None
