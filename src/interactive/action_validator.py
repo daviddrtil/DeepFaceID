@@ -1,4 +1,4 @@
-from interactive.action_enum import ActionSet, ActionSequence, get_action_name
+from interactive.action_enum import ComplexAction, SequenceAction, get_action_name
 
 
 class ActionValidator:
@@ -14,10 +14,10 @@ class ActionValidator:
 
         detected = set(actions.get('pose', []) + actions.get('expressions', []) + actions.get('occlusions', []))
 
-        if isinstance(current_action, ActionSet):
+        if isinstance(current_action, ComplexAction):
             return current_action.actions.issubset(detected)
 
-        if isinstance(current_action, ActionSequence):
+        if isinstance(current_action, SequenceAction):
             return current_action.actions[0] in detected
 
         return current_action in detected

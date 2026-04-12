@@ -1,6 +1,5 @@
 import random
-from interactive.action_enum import PoseType, OcclusionType, ExpressionType, ChallengeType, COMPLEX_ACTIONS, ACTION_SEQUENCES
-
+from interactive.action_enum import PoseAction, OcclusionAction, ExpressionAction, ChallengeType, ComplexAction, COMPLEX_ACTIONS, ACTION_SEQUENCES
 
 class ChallengeGenerator:
     def __init__(self, actions_count=6):
@@ -9,7 +8,7 @@ class ChallengeGenerator:
 
     def _generate_actions(self, count):
         actions: list[ChallengeType] = [
-            random.choice(list(OcclusionType)),
+            random.choice(list(OcclusionAction)),
             random.choice(COMPLEX_ACTIONS),
         ]
 
@@ -17,17 +16,17 @@ class ChallengeGenerator:
         seq_actions = random.sample(sequence.actions, len(sequence.actions))
         remaining = count - len(actions) - len(seq_actions)
         if remaining > 0:
-            all_single = list(PoseType) + list(OcclusionType) + list(ExpressionType)
+            all_single = list(PoseAction) + list(OcclusionAction) + list(ExpressionAction)
             extras = random.sample(all_single, min(remaining, len(all_single)))
             actions.extend(extras)
 
         while True:
             result = actions.copy()
             random.shuffle(result)
-            
+
             insert_idx = random.randint(0, len(result))
             result[insert_idx:insert_idx] = seq_actions
-            
+
             if all(result[i] != result[i+1] for i in range(len(result) - 1)):
                 return result
 

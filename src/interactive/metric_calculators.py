@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 from mediapipe import solutions
-from interactive.action_enum import PoseType, OcclusionType, ExpressionType
+from interactive.action_enum import PoseAction, OcclusionAction, ExpressionAction
 
 
 class MetricCalculators:
@@ -35,10 +35,10 @@ class MetricCalculators:
         self.key_landmarks = [1, 199, 33, 263, 61, 291]
         self.dist_matrix = np.zeros((4, 1), dtype=np.float64)
         self.regions = {
-            OcclusionType.COVER_LEFT_EYE: list(set([p for edge in solutions.face_mesh.FACEMESH_LEFT_EYE for p in edge])),
-            OcclusionType.COVER_RIGHT_EYE: list(set([p for edge in solutions.face_mesh.FACEMESH_RIGHT_EYE for p in edge])),
-            OcclusionType.COVER_MOUTH: list(set([p for edge in solutions.face_mesh.FACEMESH_LIPS for p in edge])),
-            OcclusionType.COVER_NOSE: list(set([p for edge in self.CUSTOM_NOSE_CONNECTIONS for p in edge])),
+            OcclusionAction.COVER_LEFT_EYE: list(set([p for edge in solutions.face_mesh.FACEMESH_LEFT_EYE for p in edge])),
+            OcclusionAction.COVER_RIGHT_EYE: list(set([p for edge in solutions.face_mesh.FACEMESH_RIGHT_EYE for p in edge])),
+            OcclusionAction.COVER_MOUTH: list(set([p for edge in solutions.face_mesh.FACEMESH_LIPS for p in edge])),
+            OcclusionAction.COVER_NOSE: list(set([p for edge in self.CUSTOM_NOSE_CONNECTIONS for p in edge])),
         }
 
     def evaluate(self, face_result, hand_result, mp_image, original_w, original_h):
@@ -180,19 +180,19 @@ class MetricCalculators:
     def _get_head_pose(self, yaw, pitch, roll):
         pose_actions = []
         if yaw >= self.YAW_THRESHOLD_DEG:
-            pose_actions.append(PoseType.MOVE_HEAD_RIGHT)
+            pose_actions.append(PoseAction.MOVE_HEAD_RIGHT)
         elif yaw <= -self.YAW_THRESHOLD_DEG:
-            pose_actions.append(PoseType.MOVE_HEAD_LEFT)
+            pose_actions.append(PoseAction.MOVE_HEAD_LEFT)
 
         if pitch >= self.PITCH_THRESHOLD_DEG:
-            pose_actions.append(PoseType.MOVE_HEAD_DOWN)
+            pose_actions.append(PoseAction.MOVE_HEAD_DOWN)
         elif pitch <= -self.PITCH_THRESHOLD_DEG:
-            pose_actions.append(PoseType.MOVE_HEAD_UP)
+            pose_actions.append(PoseAction.MOVE_HEAD_UP)
 
         if roll >= self.ROLL_THRESHOLD_DEG:
-            pose_actions.append(PoseType.LEAN_HEAD_LEFT)
+            pose_actions.append(PoseAction.LEAN_HEAD_LEFT)
         elif roll <= -self.ROLL_THRESHOLD_DEG:
-            pose_actions.append(PoseType.LEAN_HEAD_RIGHT)
+            pose_actions.append(PoseAction.LEAN_HEAD_RIGHT)
 
         return pose_actions
 
@@ -203,28 +203,28 @@ class MetricCalculators:
         left_blink = scores.get("eyeBlinkLeft", 0) > self.SINGLE_EYE_BLINK_SCORE
         right_blink = scores.get("eyeBlinkRight", 0) > self.SINGLE_EYE_BLINK_SCORE
         if left_blink or right_blink:
-            expr.append(ExpressionType.BLINK)
+            expr.append(ExpressionAction.BLINK)
         if left_blink:
-            expr.append(ExpressionType.BLINK_LEFT_EYE)
+            expr.append(ExpressionAction.BLINK_LEFT_EYE)
         elif right_blink:
-            expr.append(ExpressionType.BLINK_RIGHT_EYE)
+            expr.append(ExpressionAction.BLINK_RIGHT_EYE)
 
         smile = (scores.get("mouthSmileLeft", 0) + scores.get("mouthSmileRight", 0)) / 2
         jaw_open = scores.get("jawOpen", 0)
         if smile > self.SMILE_SCORE:
             if jaw_open > self.JAW_OPEN_FOR_SMILE_WITH_TEETH:
-                expr.append(ExpressionType.SMILE_TEETH)
+                expr.append(ExpressionAction.SMILE_TEETH)
             else:
-                expr.append(ExpressionType.SMILE)
+                expr.append(ExpressionAction.SMILE)
         if jaw_open > self.OPEN_MOUTH_SCORE:
-            expr.append(ExpressionType.OPEN_MOUTH)
+            expr.append(ExpressionAction.OPEN_MOUTH)
 
         brow_up = (scores.get("browInnerUp", 0) + scores.get("browOuterUpLeft", 0) + scores.get("browOuterUpRight", 0)) / 3
         brow_down = (scores.get("browDownLeft", 0) + scores.get("browDownRight", 0)) / 2
         if brow_up > self.EYEBROW_UP_SCORE:
-            expr.append(ExpressionType.EYEBROWS_UP)
+            expr.append(ExpressionAction.EYEBROWS_UP)
         elif brow_down > self.EYEBROW_DOWN_SCORE:
-            expr.append(ExpressionType.EYEBROWS_DOWN)
+            expr.append(ExpressionAction.EYEBROWS_DOWN)
 
         # Unused - not user friendly
         # gaze_left = (scores.get("eyeLookOutLeft", 0) + scores.get("eyeLookInRight", 0)) / 2

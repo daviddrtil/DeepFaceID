@@ -7,7 +7,7 @@ class BaseAction(Enum):
     def _generate_next_value_(name, start, count, last_values):
         return name.replace('_', ' ').title()
 
-class PoseType(BaseAction):
+class PoseAction(BaseAction):
     MOVE_HEAD_LEFT = auto()     # TURN_HEAD_LEFT  | LOOK_LEFT
     MOVE_HEAD_RIGHT = auto()    # TURN_HEAD_RIGHT | LOOK_RIGHT
     MOVE_HEAD_UP = auto()       # TILT_HEAD_UP    | LOOK_UP
@@ -15,13 +15,13 @@ class PoseType(BaseAction):
     LEAN_HEAD_LEFT = auto()     # ROLL_HEAD_LEFT
     LEAN_HEAD_RIGHT = auto()    # ROLL_HEAD_RIGHT
 
-class OcclusionType(BaseAction):
+class OcclusionAction(BaseAction):
     COVER_LEFT_EYE = auto()
     COVER_RIGHT_EYE = auto()
     COVER_MOUTH = auto()
     COVER_NOSE = auto()
 
-class ExpressionType(BaseAction):
+class ExpressionAction(BaseAction):
     # Eye movements
     BLINK = auto()      # blink any eye or both
     BLINK_LEFT_EYE = auto()
@@ -43,10 +43,10 @@ class ExpressionType(BaseAction):
     EYEBROWS_UP = auto()
     EYEBROWS_DOWN = auto()
 
-ActionType: TypeAlias = PoseType | OcclusionType | ExpressionType
+ActionType: TypeAlias = PoseAction | OcclusionAction | ExpressionAction
 
 @dataclass
-class ActionSet:
+class ComplexAction:
     # Concurrent actions happening at the exact same time
     actions: set[ActionType]
     name: str = field(init=False)
@@ -55,24 +55,24 @@ class ActionSet:
         sorted_actions = sorted(self.actions, key=lambda a: a.value)
         self.name = " + ".join(a.value for a in sorted_actions)
 
-ChallengeType: TypeAlias = ActionType | ActionSet
+ChallengeType: TypeAlias = ActionType | ComplexAction
 
 COMPLEX_ACTIONS = [
-    ActionSet({ExpressionType.BLINK, ExpressionType.SMILE}),
-    ActionSet({OcclusionType.COVER_LEFT_EYE, PoseType.MOVE_HEAD_LEFT}),
-    ActionSet({OcclusionType.COVER_RIGHT_EYE, PoseType.MOVE_HEAD_RIGHT}),
-    ActionSet({OcclusionType.COVER_MOUTH, PoseType.MOVE_HEAD_UP}),
-    ActionSet({OcclusionType.COVER_MOUTH, PoseType.MOVE_HEAD_DOWN}),
-    ActionSet({OcclusionType.COVER_MOUTH, PoseType.MOVE_HEAD_LEFT}),
-    ActionSet({OcclusionType.COVER_MOUTH, PoseType.MOVE_HEAD_RIGHT}),
-    ActionSet({OcclusionType.COVER_MOUTH, OcclusionType.COVER_NOSE}),
-    ActionSet({OcclusionType.COVER_MOUTH, OcclusionType.COVER_LEFT_EYE}),
-    ActionSet({OcclusionType.COVER_MOUTH, OcclusionType.COVER_RIGHT_EYE}),
+    ComplexAction({ExpressionAction.BLINK, ExpressionAction.SMILE}),
+    ComplexAction({OcclusionAction.COVER_LEFT_EYE, PoseAction.MOVE_HEAD_LEFT}),
+    ComplexAction({OcclusionAction.COVER_RIGHT_EYE, PoseAction.MOVE_HEAD_RIGHT}),
+    ComplexAction({OcclusionAction.COVER_MOUTH, PoseAction.MOVE_HEAD_UP}),
+    ComplexAction({OcclusionAction.COVER_MOUTH, PoseAction.MOVE_HEAD_DOWN}),
+    ComplexAction({OcclusionAction.COVER_MOUTH, PoseAction.MOVE_HEAD_LEFT}),
+    ComplexAction({OcclusionAction.COVER_MOUTH, PoseAction.MOVE_HEAD_RIGHT}),
+    ComplexAction({OcclusionAction.COVER_MOUTH, OcclusionAction.COVER_NOSE}),
+    ComplexAction({OcclusionAction.COVER_MOUTH, OcclusionAction.COVER_LEFT_EYE}),
+    ComplexAction({OcclusionAction.COVER_MOUTH, OcclusionAction.COVER_RIGHT_EYE}),
 ]
 
 
 @dataclass
-class ActionSequence:
+class SequenceAction:
     # Actions happening one after another
     actions: list[ActionType]
     name: str = field(init=False)
@@ -82,15 +82,15 @@ class ActionSequence:
         self.name = " -> ".join(a.value for a in sorted_actions)
 
 ACTION_SEQUENCES = [
-    ActionSequence([ExpressionType.BLINK_LEFT_EYE, ExpressionType.BLINK_RIGHT_EYE]),
-    ActionSequence([PoseType.MOVE_HEAD_LEFT, PoseType.MOVE_HEAD_RIGHT]),
-    ActionSequence([PoseType.MOVE_HEAD_UP, PoseType.MOVE_HEAD_DOWN]),
+    SequenceAction([ExpressionAction.BLINK_LEFT_EYE, ExpressionAction.BLINK_RIGHT_EYE]),
+    SequenceAction([PoseAction.MOVE_HEAD_LEFT, PoseAction.MOVE_HEAD_RIGHT]),
+    SequenceAction([PoseAction.MOVE_HEAD_UP, PoseAction.MOVE_HEAD_DOWN]),
 ]
 
 def get_action_name(action):
     if action is None:
         return None
-    if isinstance(action, (ActionSet, ActionSequence)):
+    if isinstance(action, (ComplexAction, SequenceAction)):
         return action.name
     return action.value
 
@@ -98,14 +98,14 @@ def get_action_name(action):
 def get_action_category(action):
     if action is None:
         return None
-    if isinstance(action, PoseType):
+    if isinstance(action, PoseAction):
         return 'pose'
-    if isinstance(action, OcclusionType):
+    if isinstance(action, OcclusionAction):
         return 'occlusion'
-    if isinstance(action, ExpressionType):
+    if isinstance(action, ExpressionAction):
         return 'expression'
-    if isinstance(action, ActionSet):
+    if isinstance(action, ComplexAction):
         return 'complex'
-    if isinstance(action, ActionSequence):
+    if isinstance(action, SequenceAction):
         return 'sequence'
     return None

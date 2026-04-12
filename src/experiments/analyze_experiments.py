@@ -7,7 +7,7 @@ _src_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_src_dir))
 
 from core.decision_logic import DecisionLogic
-from interactive.action_enum import PoseType, OcclusionType, ExpressionType
+from interactive.action_enum import PoseAction, OcclusionAction, ExpressionAction
 import session_parser
 import draw_graphs
 
@@ -15,9 +15,9 @@ import draw_graphs
 THRESHOLD = DecisionLogic.DEEPFAKE_SCORE_THRESHOLD
 
 _ACTION_CATEGORIES = (
-    {a.value: 'pose' for a in PoseType} |
-    {a.value: 'occlusion' for a in OcclusionType} |
-    {a.value: 'expression' for a in ExpressionType}
+    {a.value: 'pose' for a in PoseAction} |
+    {a.value: 'occlusion' for a in OcclusionAction} |
+    {a.value: 'expression' for a in ExpressionAction}
 )
 CATEGORY_ORDER = ['pose', 'occlusion', 'expression', 'complex', 'sequence']
 CATEGORY_LABELS = {
