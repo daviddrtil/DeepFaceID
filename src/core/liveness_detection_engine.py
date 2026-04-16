@@ -6,7 +6,7 @@ from core.challenge_generator import ChallengeGenerator
 from core.challenge_timer import ChallengeTimer
 from core.decision_logic import DecisionLogic
 from core.feedback_overlay import FeedbackOverlay
-from core.identity_tracker import IdentityTracker
+from identity.identity_tracker import IdentityTracker
 from interactive.action_enum import get_action_name
 from interactive.interactive_runner import InteractiveRunner
 from passive.passive_runner import PassiveRunner
