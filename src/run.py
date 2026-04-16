@@ -6,9 +6,8 @@ from pathlib import Path
 from utils.log_filter import LogFilter
 from utils.signal_helper import install_sigint_handler
 from core.liveness_detection_engine import LivenessDetectionEngine
+from core.video_writer import VideoWriter
 from preprocessing.static_video_loader import StaticVideoLoader
-from preprocessing.video_writer import VideoWriter
-from utils.path_helper import PathHelper
 from web.web_server import WebServer
 from web.web_socket_input import WebSocketInput
 from web.web_output import WebOutput

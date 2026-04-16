@@ -6,13 +6,13 @@ from core.challenge_generator import ChallengeGenerator
 from core.challenge_timer import ChallengeTimer
 from core.decision_logic import DecisionLogic
 from core.feedback_overlay import FeedbackOverlay
+from core.video_writer import VideoWriter
+from core.statistics_writer import StatisticsWriter
 from identity.identity_tracker import IdentityTracker
 from interactive.action_enum import get_action_name
 from interactive.interactive_runner import InteractiveRunner
 from passive.passive_runner import PassiveRunner
 from preprocessing.preprocessor import Preprocessor
-from preprocessing.video_writer import VideoWriter
-from preprocessing.statistics_writer import StatisticsWriter
 from preprocessing.video_input import EndOfStreamError
 
 
