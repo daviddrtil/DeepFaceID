@@ -1,3 +1,5 @@
+import contextlib
+import io
 import cv2
 import numpy as np
 import queue
@@ -30,8 +32,12 @@ def _load_rec_model(providers=None):
     if providers is None:
         providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
 
-    app = FaceAnalysis(name='buffalo_l', providers=providers)
-    app.prepare(ctx_id=0, det_size=(160, 160))
+    import onnxruntime
+    onnxruntime.set_default_logger_severity(3)
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        app = FaceAnalysis(name='buffalo_l', providers=providers)
+        app.prepare(ctx_id=0, det_size=(160, 160))
 
     for model in app.models.values():
         if hasattr(model, 'get_feat'):
