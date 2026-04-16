@@ -57,5 +57,6 @@ class Preprocessor:
     def prepare_passive_input(self, preprocessed, face_result):
         frame = preprocessed["frame"]
         aligned_face = self.aligner.extract_and_align(frame, face_result)
+        preprocessed["aligned_face"] = aligned_face
         preprocessed["passive_face_input"] = None if aligned_face is None else self.aligner.preprocess_face(aligned_face)
         return preprocessed

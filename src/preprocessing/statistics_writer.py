@@ -17,7 +17,7 @@ class StatisticsWriter:
     def _to_score_text(value):
         return "None  " if value is None else f"{value:.4f}"
 
-    def write_frame(self, frame_count, interactive_result, passive_result, current_action, challenge_index, challenge_total):
+    def write_frame(self, frame_count, interactive_result, passive_result, identity_result, current_action, challenge_index, challenge_total):
         actions = interactive_result.actions
         yaw = actions.get("yaw")
         pitch = actions.get("pitch")
@@ -41,6 +41,11 @@ class StatisticsWriter:
             f_frame = passive_result.frequency.current_frame
             t_frame = passive_result.temporal.current_frame
 
+        id_sim = self._to_score_text(identity_result.similarity if identity_result else None)
+        id_avg = self._to_score_text(identity_result.avg_similarity if identity_result else None)
+        id_drift = self._to_score_text(identity_result.drift if identity_result else None)
+        id_score = self._to_score_text(identity_result.identity_score if identity_result else None)
+
         action_text = get_action_name(current_action) or "None"
         action_text = '\'' + action_text + '\''
         category_text = get_action_category(current_action) or "None"
@@ -51,6 +56,7 @@ class StatisticsWriter:
             f"spatial_frame={s_frame:04d} frequency_frame={f_frame:04d} temporal_frame={t_frame:04d} "
             f"passive_cur={p_cur} passive_avg={p_avg} "
             f"spatial={p_s} frequency={p_f} temporal={p_t} | "
+            f"id_sim={id_sim} id_avg={id_avg} id_drift={id_drift} id_score={id_score} | "
             f"face={int(actions.get('face_detected', False))} hand={int(actions.get('hand_detected', False))} "
             f"overlap={int(actions.get('hand_face_overlap', False))} yaw={yaw_text} pitch={pitch_text} roll={roll_text} | "
             f"challenge={challenge_index}/{challenge_total} action_category={category_text} action={action_text} | "
@@ -58,7 +64,7 @@ class StatisticsWriter:
         )
         self.file.flush()
 
-    def write_summary(self, passive_result, final_decision, deepfake_label):
+    def write_summary(self, passive_result, identity_result, final_decision, deepfake_label):
         self.file.write("\n--- SUMMARY ---\n")
         if passive_result:
             s = f"{passive_result.spatial.avg_score:.4f}" if passive_result.spatial.avg_score else "N/A"
@@ -68,6 +74,14 @@ class StatisticsWriter:
                 f"Average passive scores: spatial={s}({passive_result.spatial.total_count}) "
                 f"frequency={f}({passive_result.frequency.total_count}) "
                 f"temporal={t}({passive_result.temporal.total_count})\n"
+            )
+        if identity_result:
+            self.file.write(
+                f"Identity: avg_similarity={identity_result.avg_similarity:.4f} "
+                f"min_similarity={identity_result.min_similarity:.4f} "
+                f"drift={identity_result.drift:.4f} "
+                f"identity_score={identity_result.identity_score:.4f} "
+                f"embeddings={identity_result.embedding_count}\n"
             )
         self.file.write(f"label={deepfake_label or 'unknown'}\n")
         self.file.write(f"final_decision={final_decision or 'unknown'}\n")

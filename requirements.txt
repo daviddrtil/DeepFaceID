@@ -11,3 +11,4 @@ flask
 scikit-image
 aiohttp
 matplotlib
+insightface

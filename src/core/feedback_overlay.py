@@ -142,6 +142,16 @@ class FeedbackOverlay:
             current_y = self._draw_text_line(frame, f"Deepfake Score: {passive_score * 100:.0f} %", text_color, top_text_offset)
         return current_y
 
+    def _draw_identity_data(self, frame, identity_result, top_text_offset):
+        current_y = top_text_offset
+        if identity_result is None or identity_result.similarity is None:
+            return current_y
+        sim = identity_result.similarity
+        score = identity_result.identity_score
+        sim_color = (0, 255, 0) if sim >= 0.4 else (0, 165, 255) if sim >= 0.25 else (0, 0, 255)
+        current_y = self._draw_text_line(frame, f"Identity: {sim * 100:.0f} % (score {score * 100:.0f} %)", sim_color, current_y)
+        return current_y
+
     def _get_action_progress(self, overlay):
         progress = overlay.get("challenge_progress")
         if progress is None or progress == 0:
@@ -174,7 +184,7 @@ class FeedbackOverlay:
 
         return current_y
 
-    def draw(self, frame, interactive_result, passive_result, overlay):
+    def draw(self, frame, interactive_result, passive_result, identity_result, overlay):
         if settings.config.draw_face and interactive_result.face_result and interactive_result.face_result.face_landmarks:
             self._draw_face(frame, interactive_result.face_result.face_landmarks[0])
 
@@ -186,6 +196,7 @@ class FeedbackOverlay:
         if settings.config.debug_mode:
             passive_score = passive_result.score_smooth if passive_result else None
             new_top_offset = self._draw_passive_data(frame, passive_score, TOP_OFFSET)
+            new_top_offset = self._draw_identity_data(frame, identity_result, new_top_offset)
             self._draw_interactive_data(frame, interactive_result.actions, new_top_offset)
 
         return frame
