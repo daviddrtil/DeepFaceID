@@ -72,6 +72,18 @@ class PassiveAnalyzer(ABC):
         with self.lock:
             return dict(self.score_buffer)
 
+    def reset(self):
+        self.stop()
+        self.latest_score = None
+        self.latest_frame = None
+        self.score_buffer.clear()
+        self.score_sum = 0.0
+        self.score_count = 0
+        self.stop_event.clear()
+        self.input_queue = LiveVideoQueue(maxsize=self.input_queue.maxsize)
+        self.thread = threading.Thread(target=self._run, daemon=True)
+
     def stop(self):
         self.stop_event.set()
-        self.thread.join(timeout=1.0)
+        if self.thread.is_alive():
+            self.thread.join(timeout=1.0)

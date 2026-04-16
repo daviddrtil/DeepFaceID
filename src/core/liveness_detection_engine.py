@@ -1,5 +1,6 @@
 import time
 import queue
+from concurrent.futures import ThreadPoolExecutor
 
 import settings
 from core.challenge_generator import ChallengeGenerator
@@ -17,16 +18,15 @@ from preprocessing.video_input import EndOfStreamError
 
 
 class LivenessDetectionEngine:
-    def __init__(self, video_input, output_modules, stop_event, web_output=None):
+    def __init__(self, video_input, output_modules, stop_event, web_output=None, modules=None):
         self.video_input = video_input
         self.output_modules = list(output_modules)
         self.stop_event = stop_event
         self.web_output = web_output
 
         self.preprocessor = Preprocessor()
-        self.interactive_runner = InteractiveRunner()
-        self.passive_runner = PassiveRunner()
-        self.identity_tracker = IdentityTracker()
+        self.interactive_runner, self.passive_runner, self.identity_tracker = modules or self.load_modules()
+
         self.challenge_generator = ChallengeGenerator()
         self.challenge_timer = ChallengeTimer()
         self.challenge_timer.reset(self.challenge_generator.get_current_action())
@@ -40,6 +40,12 @@ class LivenessDetectionEngine:
         self._latest_identity_result = None
         self.final_status = None
         self._video_writer_initialized = False
+
+    @staticmethod
+    def load_modules():
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            futures = [pool.submit(cls) for cls in (InteractiveRunner, PassiveRunner, IdentityTracker)]
+            return tuple(f.result() for f in futures)
 
     def _init_video_writer(self, frame):
         if self._video_writer_initialized or not self.video_input.is_live:
@@ -77,6 +83,7 @@ class LivenessDetectionEngine:
                 return
 
         self.passive_runner.start()
+        self.identity_tracker.start()
 
         start_time = time.time()
         processed_count = 0
@@ -105,7 +112,8 @@ class LivenessDetectionEngine:
                 if preprocessed_passive.get("passive_face_input") is not None:
                     self.passive_runner.submit(preprocessed_passive)
 
-                identity_result = self.identity_tracker.process(preprocessed_passive.get("aligned_face"), frame_count)
+                self.identity_tracker.submit(preprocessed_passive.get("aligned_face"), frame_count)
+                identity_result = self.identity_tracker.get_result()
                 if identity_result is not None:
                     self._latest_identity_result = identity_result
 
@@ -141,16 +149,14 @@ class LivenessDetectionEngine:
         finally:
             final_decision = None
             if self.final_status:
-                status = self.final_status.get('status')
-                if status == 'fail' and self.final_status.get('display_status') == 'Action Timeout':
-                    final_decision = 'timeout'
-                else:
-                    final_decision = status
+                final_decision = 'timeout' if self.final_status.get('display_status') == 'Action Timeout' else self.final_status.get('status')
             self.statistics_writer.write_summary(self._latest_passive_result, self._latest_identity_result, final_decision, settings.config.deepfake_label)
+            summary = StatisticsWriter.format_summary(self._latest_passive_result, self._latest_identity_result, final_decision, settings.config.deepfake_label)
+            print(f"--- SUMMARY ---\n{summary}")
             self.statistics_writer.close()
             self.video_input.stop()
             self.passive_runner.stop()
-            self.interactive_runner.stop()
+            self.identity_tracker.stop()
             self._stop_outputs()
             print(f"Total {self._last_frame_count} frames (interactive processed: {processed_count} frames) in {time.time() - start_time:.1f}s")
 

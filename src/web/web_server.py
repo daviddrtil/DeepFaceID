@@ -28,6 +28,9 @@ class WebServer:
         self.engine = None
         self.engine_thread = None
 
+        self._modules = None
+        self._modules_ready = threading.Event()
+
     def _setup_routes(self):
         self.app.router.add_get('/', self._serve_index)
         self.app.router.add_static('/static', self.static_dir)
@@ -71,11 +74,15 @@ class WebServer:
 
     def _start_engine(self, session_name, deepfake_label):
         settings.set_live_session_output(session_name, deepfake_label)
+        self._modules_ready.wait()
+        for m in self._modules:
+            m.reset()
         self.engine = LivenessDetectionEngine(
             video_input=self.video_input,
             output_modules=[self.web_output],
             stop_event=threading.Event(),
             web_output=self.web_output,
+            modules=self._modules,
         )
         self.engine_thread = threading.Thread(target=self.engine.run, daemon=True)
         self.engine_thread.start()
@@ -126,7 +133,14 @@ class WebServer:
         self.loop.run_until_complete(site.start())
         self.loop.run_forever()
 
+    def _init_modules(self):
+        self._modules = LivenessDetectionEngine.load_modules()
+        self._modules_ready.set()
+        print("All detection modules initialized")
+
     def start(self):
+        threading.Thread(target=self._init_modules, daemon=True).start()
+
         self.server_thread = threading.Thread(target=self._run_server, daemon=True)
         self.server_thread.start()
 

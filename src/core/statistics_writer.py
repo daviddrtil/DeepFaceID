@@ -64,27 +64,34 @@ class StatisticsWriter:
         )
         self.file.flush()
 
-    def write_summary(self, passive_result, identity_result, final_decision, deepfake_label):
-        self.file.write("\n--- SUMMARY ---\n")
+    @staticmethod
+    def format_summary(passive_result, identity_result, final_decision, deepfake_label):
+        lines = []
         if passive_result:
             s = f"{passive_result.spatial.avg_score:.4f}" if passive_result.spatial.avg_score else "N/A"
             f = f"{passive_result.frequency.avg_score:.4f}" if passive_result.frequency.avg_score else "N/A"
             t = f"{passive_result.temporal.avg_score:.4f}" if passive_result.temporal.avg_score else "N/A"
-            self.file.write(
+            lines.append(
                 f"Average passive scores: spatial={s}({passive_result.spatial.total_count}) "
                 f"frequency={f}({passive_result.frequency.total_count}) "
-                f"temporal={t}({passive_result.temporal.total_count})\n"
+                f"temporal={t}({passive_result.temporal.total_count})"
             )
         if identity_result:
-            self.file.write(
+            lines.append(
                 f"Identity: avg_similarity={identity_result.avg_similarity:.4f} "
                 f"min_similarity={identity_result.min_similarity:.4f} "
                 f"drift={identity_result.drift:.4f} "
                 f"identity_score={identity_result.identity_score:.4f} "
-                f"embeddings={identity_result.embedding_count}\n"
+                f"embeddings={identity_result.embedding_count}"
             )
-        self.file.write(f"label={deepfake_label or 'unknown'}\n")
-        self.file.write(f"final_decision={final_decision or 'unknown'}\n")
+        lines.append(f"label={deepfake_label or 'unknown'}")
+        lines.append(f"final_decision={final_decision or 'unknown'}")
+        return "\n".join(lines)
+
+    def write_summary(self, passive_result, identity_result, final_decision, deepfake_label):
+        self.file.write("\n--- SUMMARY ---\n")
+        self.file.write(self.format_summary(passive_result, identity_result, final_decision, deepfake_label))
+        self.file.write("\n")
         self.file.flush()
 
     def close(self):

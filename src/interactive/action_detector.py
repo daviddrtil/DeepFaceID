@@ -15,5 +15,9 @@ class ActionDetector:
         completed_action, challenge_progress = self.action_validator.validate(current_action, actions, challenge_timer, timestamp_ms)
         return face_result, hand_result, actions, hand_mask_large, completed_action, challenge_progress
 
+    def reset(self):
+        self.landmark_extractor.reset()
+        self.action_validator = ActionValidator()
+
     def close(self):
         self.landmark_extractor.close()

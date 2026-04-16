@@ -4,7 +4,7 @@ import torch
 from collections import deque
 from dataclasses import dataclass
 from passive.passive_analyzer import PassiveAnalyzer, AnalyzerResult
-from passive.spatial_analyzer.ucf_detector import UCFDetector
+from passive.spatial_analyzer.ucf_detector import get_ucf_detector
 
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -37,7 +37,7 @@ class PassiveResult:
 class SpatialAnalyzer(PassiveAnalyzer):
     def __init__(self, queue_size):
         super().__init__(queue_size)
-        self.detector = UCFDetector(DEVICE)
+        self.detector = get_ucf_detector(DEVICE)
 
     def predict(self, passive_input):
         tensor = passive_input.get("passive_face_input")
@@ -97,14 +97,7 @@ class PassiveRunner:
         for worker in self._workers:
             worker.stop()
 
-        result = self.get_passive_result()
-        if result:
-            s = f"{result.spatial.avg_score:.4f}" if result.spatial.avg_score else "N/A"
-            f = f"{result.frequency.avg_score:.4f}" if result.frequency.avg_score else "N/A"
-            t = f"{result.temporal.avg_score:.4f}" if result.temporal.avg_score else "N/A"
-            print(
-                f"Average passive scores: "
-                f"spatial={s}({result.spatial.total_count}) | "
-                f"frequency={f}({result.frequency.total_count}) | "
-                f"temporal={t}({result.temporal.total_count})"
-            )
+    def reset(self):
+        for worker in self._workers:
+            worker.reset()
+        self._score_window.clear()

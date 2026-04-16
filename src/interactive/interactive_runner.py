@@ -68,5 +68,9 @@ class InteractiveRunner:
 
         return self.last_result
 
-    def stop(self):
+    def reset(self):
+        self.action_detector.reset()
+        self.last_result = None
+
+    def close(self):
         self.action_detector.close()
