@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 
 
+FRAME_SKIP = 8
+
 _cvit_instance = None
 
 
