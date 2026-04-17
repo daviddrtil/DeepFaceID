@@ -117,6 +117,7 @@ class LivenessDetectionEngine:
                     self._latest_identity_result = identity_result
 
                 if interactive_result.completed_action is not None:
+                    self.decision_logic.complete_action(interactive_result.completed_action, frame_count, self.passive_runner)
                     self.challenge_generator.mark_current_completed()
                     self.challenge_timer.reset(self.challenge_generator.get_current_action())
 
@@ -148,10 +149,12 @@ class LivenessDetectionEngine:
         finally:
             self._latest_passive_result = self.passive_runner.get_passive_result()
             final_decision = None
+            deepfake_score = None
             if self.final_status:
                 final_decision = 'timeout' if self.final_status.get('display_status') == 'Action Timeout' else self.final_status.get('status')
-            self.statistics_writer.write_summary(self._latest_passive_result, self._latest_identity_result, final_decision, settings.config.deepfake_label)
-            summary = StatisticsWriter.format_summary(self._latest_passive_result, self._latest_identity_result, final_decision, settings.config.deepfake_label)
+                deepfake_score = self.final_status.get('deepfake_score')
+            self.statistics_writer.write_summary(self._latest_passive_result, self._latest_identity_result, final_decision, settings.config.deepfake_label, deepfake_score)
+            summary = StatisticsWriter.format_summary(self._latest_passive_result, self._latest_identity_result, final_decision, settings.config.deepfake_label, deepfake_score)
             print(f"--- SUMMARY ---\n{summary}")
             self.statistics_writer.close()
             self.video_input.stop()
@@ -185,7 +188,7 @@ class LivenessDetectionEngine:
         passive_result = self.passive_runner.get_passive_result()
         if passive_result is not None:
             self._latest_passive_result = passive_result
-        decision = self.decision_logic.fuse(passive_result, identity_result, completed, total, timeout_failed)
+        decision = self.decision_logic.fuse(passive_result, identity_result, completed, total, timeout_failed, passive_runner=self.passive_runner)
         passive_delay_frames = frame_count - passive_result.spatial.current_frame if passive_result else 0
         overlay = {
             'current_action': action,

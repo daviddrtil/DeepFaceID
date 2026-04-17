@@ -19,11 +19,13 @@ class PassiveResult:
     temporal: AnalyzerResult
     score_cur: float = None
     score_avg: float = None
+    score_max: float = None
     score_smooth: float = None
 
     def __post_init__(self):
         self.score_cur = self._weighted('current_score')
         self.score_avg = self._weighted('avg_score')
+        self.score_max = self._weighted('max_score')
 
     def _weighted(self, attr):
         total, weight = 0.0, 0.0

@@ -152,4 +152,12 @@ class CViTDetector(nn.Module):
             prob = torch.sigmoid(logits)
         return prob[0, 0].item()
 
-    # TODO: add predict_batch()
+    def predict_batch(self, face_tensors: list[torch.Tensor]):
+        if not face_tensors:
+            return []
+        device = next(self.model.parameters()).device
+        batch = torch.stack(face_tensors).to(device)
+        with torch.no_grad():
+            logits = self.model(batch)
+            probs = torch.sigmoid(logits)
+        return probs[:, 0].tolist()

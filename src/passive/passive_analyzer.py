@@ -11,6 +11,7 @@ class AnalyzerResult:
     current_score: float = None
     current_frame: int = 0
     avg_score: float = None
+    max_score: float = None
     total_count: int = 0
 
 
@@ -22,6 +23,7 @@ class PassiveAnalyzer(ABC):
         self.score_buffer = OrderedDict()
         self.score_sum = 0.0
         self.score_count = 0
+        self.score_max = 0.0
         self.lock = threading.Lock()
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.stop_event = threading.Event()
@@ -53,6 +55,7 @@ class PassiveAnalyzer(ABC):
                         self.score_buffer[frame_count] = score
                     self.score_sum += score
                     self.score_count += 1
+                    self.score_max = max(self.score_max, score)
 
     def get_result(self, ref_frame=None):
         with self.lock:
@@ -66,7 +69,8 @@ class PassiveAnalyzer(ABC):
             else:
                 score, frame = self.latest_score, self.latest_frame
             avg = (self.score_sum / self.score_count) if self.score_count else None
-            return AnalyzerResult(score, frame or 0, avg, self.score_count)
+            max_s = self.score_max if self.score_count else None
+            return AnalyzerResult(score, frame or 0, avg, max_s, self.score_count)
 
     def get_score_buffer(self):
         with self.lock:
@@ -79,6 +83,7 @@ class PassiveAnalyzer(ABC):
         self.score_buffer.clear()
         self.score_sum = 0.0
         self.score_count = 0
+        self.score_max = 0.0
         self.stop_event.clear()
         self.input_queue = LiveVideoQueue(maxsize=self.input_queue.maxsize)
         self.thread = threading.Thread(target=self._run, daemon=True)
