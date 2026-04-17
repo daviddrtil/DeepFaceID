@@ -22,10 +22,10 @@ class OcclusionAction(BaseAction):
     COVER_NOSE = auto()
 
 class ExpressionAction(BaseAction):
-    # Eye movements
-    BLINK = auto()      # blink any eye or both
-    BLINK_LEFT_EYE = auto()
-    BLINK_RIGHT_EYE = auto()
+    # Eye movements - not used, deepfakes cannot realibly fake this action
+    # BLINK = auto()      # blink any eye or both
+    # BLINK_LEFT_EYE = auto()
+    # BLINK_RIGHT_EYE = auto()
 
     # Gaze directions - unused - not user friendly
     # GAZE_LEFT = auto()
@@ -68,7 +68,7 @@ class HoldStillAction:
 ChallengeType: TypeAlias = ActionType | ComplexAction | HoldStillAction
 
 COMPLEX_ACTIONS = [
-    ComplexAction({ExpressionAction.BLINK, ExpressionAction.SMILE}),
+    # ComplexAction({ExpressionAction.BLINK, ExpressionAction.SMILE}),
     ComplexAction({OcclusionAction.COVER_LEFT_EYE, PoseAction.MOVE_HEAD_LEFT}),
     ComplexAction({OcclusionAction.COVER_RIGHT_EYE, PoseAction.MOVE_HEAD_RIGHT}),
     ComplexAction({OcclusionAction.COVER_MOUTH, PoseAction.MOVE_HEAD_UP}),
@@ -92,7 +92,7 @@ class SequenceAction:
         self.name = " -> ".join(a.value for a in sorted_actions)
 
 ACTION_SEQUENCES = [
-    SequenceAction([ExpressionAction.BLINK_LEFT_EYE, ExpressionAction.BLINK_RIGHT_EYE]),
+    # SequenceAction([ExpressionAction.BLINK_LEFT_EYE, ExpressionAction.BLINK_RIGHT_EYE]),
     SequenceAction([PoseAction.MOVE_HEAD_LEFT, PoseAction.MOVE_HEAD_RIGHT]),
     SequenceAction([PoseAction.MOVE_HEAD_UP, PoseAction.MOVE_HEAD_DOWN]),
 ]

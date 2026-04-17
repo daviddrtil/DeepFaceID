@@ -204,15 +204,6 @@ class MetricCalculators:
         scores = {cat.category_name: cat.score for cat in blendshapes}
         expr = []
 
-        left_blink = scores.get("eyeBlinkLeft", 0) > self.SINGLE_EYE_BLINK_SCORE
-        right_blink = scores.get("eyeBlinkRight", 0) > self.SINGLE_EYE_BLINK_SCORE
-        if left_blink or right_blink:
-            expr.append(ExpressionAction.BLINK)
-        if left_blink:
-            expr.append(ExpressionAction.BLINK_LEFT_EYE)
-        elif right_blink:
-            expr.append(ExpressionAction.BLINK_RIGHT_EYE)
-
         smile = (scores.get("mouthSmileLeft", 0) + scores.get("mouthSmileRight", 0)) / 2
         jaw_open = scores.get("jawOpen", 0)
         if smile > self.SMILE_SCORE:
@@ -229,6 +220,16 @@ class MetricCalculators:
             expr.append(ExpressionAction.EYEBROWS_UP)
         elif brow_down > self.EYEBROW_DOWN_SCORE:
             expr.append(ExpressionAction.EYEBROWS_DOWN)
+
+        # Unused - deepfakes cannot reliably replicate
+        # left_blink = scores.get("eyeBlinkLeft", 0) > self.SINGLE_EYE_BLINK_SCORE
+        # right_blink = scores.get("eyeBlinkRight", 0) > self.SINGLE_EYE_BLINK_SCORE
+        # if left_blink or right_blink:
+        #     expr.append(ExpressionAction.BLINK)
+        # if left_blink:
+        #     expr.append(ExpressionAction.BLINK_LEFT_EYE)
+        # elif right_blink:
+        #     expr.append(ExpressionAction.BLINK_RIGHT_EYE)
 
         # Unused - not user friendly
         # gaze_left = (scores.get("eyeLookOutLeft", 0) + scores.get("eyeLookInRight", 0)) / 2
