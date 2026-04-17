@@ -5,9 +5,9 @@ from interactive.action_enum import PoseAction, OcclusionAction, ExpressionActio
 
 
 class MetricCalculators:
-    YAW_THRESHOLD_DEG = 25
-    PITCH_THRESHOLD_DEG = 20
-    ROLL_THRESHOLD_DEG = 20
+    YAW_THRESHOLD_DEG = 35
+    PITCH_THRESHOLD_DEG = 25
+    ROLL_THRESHOLD_DEG = 25
     STILL_THRESHOLD_DEG = 20
 
     SINGLE_EYE_BLINK_SCORE = 0.4
