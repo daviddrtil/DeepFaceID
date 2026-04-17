@@ -5,10 +5,11 @@ from collections import deque
 from dataclasses import dataclass
 from passive.passive_analyzer import PassiveAnalyzer, AnalyzerResult
 from passive.spatial_analyzer.ucf_detector import get_ucf_detector
+from passive.temporal_analyzer.cvit_detector import get_cvit_detector, preprocess_face, FRAME_SKIP
 
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-WEIGHTS = {'spatial': 1.0, 'frequency': 0.0, 'temporal': 0.0}
+WEIGHTS = {'spatial': 0.5, 'frequency': 0.0, 'temporal': 0.5}
 
 
 @dataclass
@@ -59,18 +60,21 @@ class FrequencyAnalyzer(PassiveAnalyzer):
 class TemporalAnalyzer(PassiveAnalyzer):
     def __init__(self, queue_size):
         super().__init__(queue_size)
+        self.detector = get_cvit_detector(DEVICE)
 
     def predict(self, passive_input):
-        fps = random.uniform(50, 100)
-        time.sleep(1.0 / fps)
-        return random.uniform(0.4, 0.6)
+        face_crop = passive_input.get("bbox_face_crop")
+        if face_crop is None:
+            return None
+        tensor = preprocess_face(face_crop)
+        return self.detector.predict_single(tensor)
 
 
 class PassiveRunner:
     def __init__(self):
         self.spatial = SpatialAnalyzer(queue_size=4)
         self.frequency = FrequencyAnalyzer(queue_size=4)
-        self.temporal = TemporalAnalyzer(queue_size=16)
+        self.temporal = TemporalAnalyzer(queue_size=8)
         self._workers = (self.spatial, self.frequency, self.temporal)
         self._score_window = deque(maxlen=30)    # smooth window
 
@@ -79,8 +83,12 @@ class PassiveRunner:
             worker.start()
 
     def submit(self, passive_input):
-        for worker in self._workers:
-            worker.submit(passive_input)
+        self.spatial.submit(passive_input)
+        self.frequency.submit(passive_input)
+        frame_count = passive_input.get("frame_count", 0)
+        if frame_count % FRAME_SKIP == 0:
+            # TODO: condition fails in live mode when frames are dropped
+            self.temporal.submit(passive_input)
 
     def get_passive_result(self):
         spatial = self.spatial.get_result()

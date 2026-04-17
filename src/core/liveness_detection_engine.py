@@ -147,6 +147,7 @@ class LivenessDetectionEngine:
 
                 processed_count += 1
         finally:
+            self._latest_passive_result = self.passive_runner.get_passive_result()
             final_decision = None
             if self.final_status:
                 final_decision = 'timeout' if self.final_status.get('display_status') == 'Action Timeout' else self.final_status.get('status')

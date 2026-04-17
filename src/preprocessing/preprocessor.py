@@ -59,4 +59,23 @@ class Preprocessor:
         aligned_face = self.aligner.extract_and_align(frame, face_result)
         preprocessed["aligned_face"] = aligned_face
         preprocessed["passive_face_input"] = None if aligned_face is None else self.aligner.preprocess_face(aligned_face)
+        preprocessed["bbox_face_crop"] = self._crop_face_bbox(frame, face_result)
         return preprocessed
+
+    @staticmethod
+    def _crop_face_bbox(frame_bgr, face_result, padding=10, size=224):
+        if face_result is None or not face_result.face_landmarks:
+            return None
+        h, w = frame_bgr.shape[:2]
+        landmarks = face_result.face_landmarks[0]
+        xs = [lm.x * w for lm in landmarks]
+        ys = [lm.y * h for lm in landmarks]
+        x1 = max(0, int(min(xs)) - padding)
+        y1 = max(0, int(min(ys)) - padding)
+        x2 = min(w, int(max(xs)) + padding)
+        y2 = min(h, int(max(ys)) + padding)
+        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        crop = frame_rgb[y1:y2, x1:x2]
+        if crop.size == 0:
+            return None
+        return cv2.resize(crop, (size, size), interpolation=cv2.INTER_AREA)
