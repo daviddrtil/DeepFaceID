@@ -109,8 +109,7 @@ class LivenessDetectionEngine:
                 interactive_result = self.interactive_runner.process_frame(preprocessed, current_action, self.challenge_timer)
 
                 preprocessed_passive = self.preprocessor.prepare_passive_input(preprocessed, interactive_result.face_result)
-                if preprocessed_passive.get("passive_face_input") is not None:
-                    self.passive_runner.submit(preprocessed_passive)
+                self.passive_runner.submit(preprocessed_passive)
 
                 self.identity_tracker.submit(preprocessed_passive.get("aligned_face"), frame_count)
                 identity_result = self.identity_tracker.get_result()

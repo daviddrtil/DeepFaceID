@@ -1,13 +1,7 @@
 from pathlib import Path
-import numpy as np
 import torch
 import torch.nn as nn
 
-
-FRAME_SKIP = 8       # process every N-th frame
-
-IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
 _cvit_instance = None
 
@@ -121,12 +115,6 @@ class CViT(nn.Module):
         x = self.transformer(x, mask)
         x = self.to_cls_token(x[:, 0])
         return self.mlp_head(x)
-
-
-def preprocess_face(face_rgb: np.ndarray):
-    x = face_rgb.astype(np.float32) / 255.0
-    x = (x - IMAGENET_MEAN) / IMAGENET_STD
-    return torch.from_numpy(np.transpose(x, (2, 0, 1)))
 
 
 def get_cvit_detector(device):

@@ -5,7 +5,7 @@ from collections import deque
 from dataclasses import dataclass
 from passive.passive_analyzer import PassiveAnalyzer, AnalyzerResult
 from passive.spatial_analyzer.ucf_detector import get_ucf_detector
-from passive.temporal_analyzer.cvit_detector import get_cvit_detector, preprocess_face, FRAME_SKIP
+from passive.temporal_analyzer.cvit_detector import get_cvit_detector
 
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -63,10 +63,9 @@ class TemporalAnalyzer(PassiveAnalyzer):
         self.detector = get_cvit_detector(DEVICE)
 
     def predict(self, passive_input):
-        face_crop = passive_input.get("bbox_face_crop")
-        if face_crop is None:
+        tensor = passive_input.get("cvit_face_tensor")
+        if tensor is None:
             return None
-        tensor = preprocess_face(face_crop)
         return self.detector.predict_single(tensor)
 
 
@@ -83,11 +82,10 @@ class PassiveRunner:
             worker.start()
 
     def submit(self, passive_input):
-        self.spatial.submit(passive_input)
-        self.frequency.submit(passive_input)
-        frame_count = passive_input.get("frame_count", 0)
-        if frame_count % FRAME_SKIP == 0:
-            # TODO: condition fails in live mode when frames are dropped
+        if passive_input.get("passive_face_input") is not None:
+            self.spatial.submit(passive_input)
+            self.frequency.submit(passive_input)
+        if passive_input.get("cvit_face_tensor") is not None:
             self.temporal.submit(passive_input)
 
     def get_passive_result(self):
