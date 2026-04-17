@@ -59,7 +59,11 @@ function showScreen(screen) {
 async function requestCamera() {
     try {
         stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'user' }
+            video: {
+                facingMode: 'user',
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
+            }
         });
         webcam.srcObject = stream;
         await webcam.play();
@@ -223,9 +227,15 @@ function drawOverlay() {
     drawDeepfakeScore();
 }
 
+function getScoreColor(score) {
+    if (score < 0.40) return '#00ff88';
+    // if (score <= 0.50) return '#ffcc00';
+    return '#ff4444';
+}
+
 function drawDeepfakeScore() {
     if (!lastServerData) return;
-    const score = lastServerData.passive_score_smooth;
+    const score = lastServerData.deepfake_score;
     if (score === undefined || score === null) return;
 
     const pct = Math.round(score * 100);
@@ -246,7 +256,7 @@ function drawDeepfakeScore() {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
     ctx.fillRect(x - pad, y - fontSize - pad / 2, metrics.width + pad * 2, fontSize + pad * 2);
 
-    ctx.fillStyle = score > 0.5 ? '#ff4444' : '#00ff88';
+    ctx.fillStyle = getScoreColor(score);
     ctx.fillText(text, x, y);
 
     ctx.restore();
@@ -290,12 +300,13 @@ function showCompletion(data) {
     finalStatus.textContent = data.status_text;
     finalStatus.className = data.status;
 
-    const score = data.passive_score_avg;
+    const score = data.deepfake_score;
     if (score !== undefined && score !== null) {
         const pct = (score * 100).toFixed(0);
-        const conf = score <= 0.5 ? 'Real' : 'Fake';
-        confidenceDisplay.textContent = `Deepfake Score: ${pct}% (${conf})`;
-        confidenceDisplay.className = `confidence-display ${score <= 0.5 ? 'real' : 'fake'}`;
+        const color = getScoreColor(score);
+        confidenceDisplay.textContent = `Deepfake Score: ${pct}%`;
+        confidenceDisplay.style.color = color;
+        confidenceDisplay.className = 'confidence-display';
     } else {
         confidenceDisplay.textContent = '';
     }

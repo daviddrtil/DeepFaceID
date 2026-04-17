@@ -179,6 +179,7 @@ class LivenessDetectionEngine:
             'final': decision is not None and decision['status'] in ('pass', 'fail'),
             'passive_score_avg': passive_result.score_avg if passive_result else None,
             'passive_score_smooth': passive_result.score_smooth if passive_result else None,
+            'deepfake_score': decision.get('deepfake_score') if decision else None,
             'identity_similarity': identity_result.similarity if identity_result else None,
             'identity_score': identity_result.identity_score if identity_result else None,
         }
