@@ -3,9 +3,9 @@ import torch
 import torch.nn as nn
 
 
-FRAME_SKIP = 1
-WINDOW_SIZE = 15    # frames per inference window (matches demo inference / original training)
-FAKE_THRESHOLD = 0.9  # window-mean fake-prob threshold
+FRAME_SKIP = 1         # frame
+WINDOW_SIZE = 15       # frames per inference window (matches demo inference / original training)
+FAKE_THRESHOLD = 0.85  # window-mean fake-prob threshold
 
 _cvit_instance = None
 

@@ -77,7 +77,7 @@ class PassiveRunner:
         self.frequency = FrequencyAnalyzer(queue_size=4)
         self.temporal = TemporalAnalyzer(queue_size=8)
         self._workers = (self.spatial, self.frequency, self.temporal)
-        self._score_window = deque(maxlen=10)    # smooth window
+        self._score_window = deque(maxlen=8)    # smooth window
 
     def start(self):
         for worker in self._workers:

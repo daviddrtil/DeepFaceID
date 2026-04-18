@@ -164,6 +164,7 @@ class LivenessDetectionEngine:
         fps = processed_count / elapsed if elapsed > 0 else 0
         p_cur = passive_result.score_cur if passive_result else None
         p_avg = passive_result.score_avg if passive_result else None
+        p_smooth = passive_result.score_smooth if passive_result else None
         p_s = passive_result.spatial.current_score if passive_result else None
         p_f = passive_result.frequency.current_score if passive_result else None
         p_t = passive_result.temporal.current_score if passive_result else None
@@ -171,7 +172,7 @@ class LivenessDetectionEngine:
         id_min_sim = identity_result.min_similarity if identity_result else None
         print(
             f"frame={frame_count:04d} fps={fps:2.0f}"
-            f" | deepfake_score={pct(self._latest_deepfake_score)} passive_avg={pct(p_avg)} passive_cur={pct(p_cur)}"
+            f" | deepfake_score={pct(self._latest_deepfake_score)} avg={pct(p_avg)} cur={pct(p_cur)} smooth={pct(p_smooth)}"
             f" | spatial={pct(p_s)} frequency={pct(p_f)} temporal={pct(p_t)}"
             f" | identity_score={pct(id_score)} min_similarity={pct(id_min_sim)}"
         )
