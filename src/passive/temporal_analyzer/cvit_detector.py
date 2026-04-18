@@ -3,7 +3,9 @@ import torch
 import torch.nn as nn
 
 
-FRAME_SKIP = 8
+FRAME_SKIP = 1
+WINDOW_SIZE = 15    # frames per inference window (matches demo inference / original training)
+FAKE_THRESHOLD = 0.9  # window-mean fake-prob threshold
 
 _cvit_instance = None
 
@@ -161,3 +163,14 @@ class CViTDetector(nn.Module):
             logits = self.model(batch)
             probs = torch.sigmoid(logits)
         return probs[:, 0].tolist()
+
+    @staticmethod
+    def compute_window_scores(per_frame_scores, window_size=WINDOW_SIZE):
+        # Non-overlapping window of frames
+        if not per_frame_scores:
+            return []
+        scores = []
+        for i in range(0, len(per_frame_scores), window_size):
+            window = per_frame_scores[i:i + window_size]
+            scores.append(sum(window) / len(window))
+        return scores

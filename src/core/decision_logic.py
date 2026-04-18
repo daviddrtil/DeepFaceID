@@ -1,5 +1,8 @@
 from interactive.action_enum import get_action_category
+from passive.temporal_analyzer.cvit_detector import WINDOW_SIZE, FAKE_THRESHOLD
 
+
+PASSIVE_WEIGHTS = {'spatial': 0.6, 'frequency': 0.0, 'temporal': 0.4}
 
 ACTION_WEIGHTS = {
     'complex': 2.0,
@@ -12,7 +15,7 @@ ACTION_WEIGHTS = {
 
 
 class DecisionLogic:
-    DEEPFAKE_SCORE_THRESHOLD = 0.25
+    DEEPFAKE_SCORE_THRESHOLD = 0.40
     SIMILARITY_REJECT_THRESHOLD = 0.20
     IDENTITY_SCORE_THRESHOLD = 0.45
     CONFIDENT_FAKE_SCORE = 0.90
@@ -30,12 +33,21 @@ class DecisionLogic:
         temporal_buf = passive_runner.temporal.get_score_buffer()
 
         spatial_scores = [v for f, v in spatial_buf.items() if start <= f <= frame_count]
-        temporal_scores = [v for f, v in temporal_buf.items() if start <= f <= frame_count]
+        temporal_scores = [v for f, v in sorted(temporal_buf.items()) if start <= f <= frame_count]
 
         spatial_max = max(spatial_scores) if spatial_scores else 0.0
-        temporal_max = max(temporal_scores) if temporal_scores else 0.0
 
-        action_score = spatial_max * 0.7 + temporal_max * 0.3
+        # Window temporal scores to reduce per-frame noise (matches demo)
+        if temporal_scores:
+            window_means = []
+            for i in range(0, len(temporal_scores), WINDOW_SIZE):
+                w = temporal_scores[i:i + WINDOW_SIZE]
+                window_means.append(sum(w) / len(w))
+            temporal_max = max(window_means)
+        else:
+            temporal_max = 0.0
+
+        action_score = spatial_max * 0.9 + temporal_max * 0.1
         self._action_scores.append((action_score, weight))
         self._action_start_frame = frame_count
 
@@ -46,29 +58,43 @@ class DecisionLogic:
             weighted_action = sum(s * w for s, w in self._action_scores) / total_w if total_w else 0.0
 
         spatial_max = passive_result.spatial.max_score if passive_result and passive_result.spatial.max_score else 0.0
-        temporal_max = passive_result.temporal.max_score if passive_result and passive_result.temporal.max_score else 0.0
-        passive_avg = passive_result.score_avg if passive_result and passive_result.score_avg else 0.0
+        spatial_avg = passive_result.spatial.avg_score if passive_result and passive_result.spatial.avg_score else 0.0
 
-        # Count temporal frames above fake threshold
+        # Windowed temporal analysis (matches demo: 15-frame windows, 0.85 threshold)
         temporal_buf = passive_runner.temporal.get_score_buffer() if passive_runner else {}
+        temporal_max_window = 0.0
         temporal_fake_ratio = 0.0
         if temporal_buf:
-            above = sum(1 for v in temporal_buf.values() if v > 0.5)
-            temporal_fake_ratio = above / len(temporal_buf)
+            sorted_scores = [v for _, v in sorted(temporal_buf.items())]
+            window_means = []
+            for i in range(0, len(sorted_scores), WINDOW_SIZE):
+                w = sorted_scores[i:i + WINDOW_SIZE]
+                window_means.append(sum(w) / len(w))
+            if window_means:
+                temporal_max_window = max(window_means)
+                above = sum(1 for m in window_means if m > 0.5)
+                temporal_fake_ratio = above / len(window_means)
 
-        # Identity penalty: low similarity = suspicious
+        # Scale temporal signal: above FAKE_THRESHOLD → 1.0, suspicious → partial
+        if temporal_max_window >= FAKE_THRESHOLD:
+            temporal_signal = 1.0
+        elif temporal_max_window > 0.5:
+            temporal_signal = (temporal_max_window - 0.5) / (FAKE_THRESHOLD - 0.5) * 0.5
+        else:
+            temporal_signal = 0.0
+
+        # Identity penalty: low identity score = suspicious
         identity_penalty = 0.0
         if identity_result and identity_result.embedding_count >= 10:
             id_score = identity_result.identity_score or 0.0
-            identity_penalty = max(0.0, 0.5 - id_score)
+            identity_penalty = max(0.0, 0.70 - id_score)
 
-        # Weighted composite
         signals = {
             'action': (weighted_action, 3.0),
-            'spatial_max': (spatial_max, 2.0),
-            'temporal_max': (temporal_max, 1.0),
-            'temporal_fake_ratio': (temporal_fake_ratio, 1.0),
-            'passive_avg': (passive_avg, 0.5),
+            'spatial_max': (spatial_max, 2.5),
+            'spatial_avg': (min(1.0, spatial_avg * 15), 1.5),
+            'temporal_signal': (temporal_signal, 2.0),
+            'temporal_fake_ratio': (temporal_fake_ratio, 0.5),
             'identity_penalty': (identity_penalty, 1.5),
         }
 
