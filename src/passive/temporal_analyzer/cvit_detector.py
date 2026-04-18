@@ -154,23 +154,12 @@ class CViTDetector(nn.Module):
             prob = torch.sigmoid(logits)
         return prob[0, 0].item()
 
-    def predict_batch(self, face_tensors: list[torch.Tensor]):
+    def predict_window(self, face_tensors: list[torch.Tensor]):
         if not face_tensors:
-            return []
+            return None
         device = next(self.model.parameters()).device
         batch = torch.stack(face_tensors).to(device)
         with torch.no_grad():
-            logits = self.model(batch)
-            probs = torch.sigmoid(logits)
-        return probs[:, 0].tolist()
-
-    @staticmethod
-    def compute_window_scores(per_frame_scores, window_size=WINDOW_SIZE):
-        # Non-overlapping window of frames
-        if not per_frame_scores:
-            return []
-        scores = []
-        for i in range(0, len(per_frame_scores), window_size):
-            window = per_frame_scores[i:i + window_size]
-            scores.append(sum(window) / len(window))
-        return scores
+            logits = self.model(batch)   # [N, 2]
+            probs = torch.sigmoid(logits)  # [N, 2]
+        return probs[:, 0].mean().item()  # mean fake-prob

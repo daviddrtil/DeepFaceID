@@ -5,7 +5,7 @@ from collections import deque
 from dataclasses import dataclass
 from passive.passive_analyzer import PassiveAnalyzer, AnalyzerResult
 from passive.spatial_analyzer.ucf_detector import get_ucf_detector
-from passive.temporal_analyzer.cvit_detector import get_cvit_detector, CViTDetector, FAKE_THRESHOLD
+from passive.temporal_analyzer.cvit_detector import get_cvit_detector, WINDOW_SIZE, FAKE_THRESHOLD
 from core.decision_logic import PASSIVE_WEIGHTS
 
 
@@ -63,12 +63,25 @@ class TemporalAnalyzer(PassiveAnalyzer):
     def __init__(self, queue_size):
         super().__init__(queue_size)
         self.detector = get_cvit_detector(DEVICE)
+        self._frame_buffer: list = []  # accumulates tensors up to WINDOW_SIZE
 
     def predict(self, passive_input):
         tensor = passive_input.get("cvit_face_tensor")
         if tensor is None:
             return None
-        return self.detector.predict_single(tensor)
+
+        self._frame_buffer.append(tensor)
+        if len(self._frame_buffer) < WINDOW_SIZE:
+            return None
+
+        # run batch inference, emit one window-mean score
+        score = self.detector.predict_window(self._frame_buffer[:WINDOW_SIZE])
+        self._frame_buffer = []  # clear for next non-overlapping window
+        return score
+
+    def reset(self):
+        super().reset()
+        self._frame_buffer = []
 
 
 class PassiveRunner:
@@ -77,7 +90,7 @@ class PassiveRunner:
         self.frequency = FrequencyAnalyzer(queue_size=4)
         self.temporal = TemporalAnalyzer(queue_size=8)
         self._workers = (self.spatial, self.frequency, self.temporal)
-        self._score_window = deque(maxlen=8)    # smooth window
+        self._score_window = deque(maxlen=10)    # smooth window
 
     def start(self):
         for worker in self._workers:
@@ -114,8 +127,5 @@ class PassiveRunner:
         buf = self.temporal.get_score_buffer()
         if not buf:
             return None
-        scores = [v for _, v in sorted(buf.items())]
-        windows = CViTDetector.compute_window_scores(scores)
-        if not windows:
-            return None
+        windows = [v for _, v in sorted(buf.items())]
         return max(windows), sum(1 for m in windows if m >= FAKE_THRESHOLD), len(windows)
