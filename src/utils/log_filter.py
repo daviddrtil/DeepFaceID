@@ -11,12 +11,15 @@ class LogFilter:
         "created tensorflow lite xnnpack delegate for cpu",
         "inference_feedback_manager.cc:114",
         "landmark_projection_calculator.cc:186",
-        "WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead."
+        "WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.",
+        "applied providers:",
+        "find model:",
+        "set det-size:",
     )
 
     @staticmethod
     def configure_native_logging():
-        # Must run before importing modules that initialize MediaPipe/TFLite runtimes.
+        # Must run before importing modules that initialize MediaPipe/TFLite runtimes
         os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
         os.environ["GLOG_minloglevel"] = "2"
         os.environ["GLOG_logtostderr"] = "1"

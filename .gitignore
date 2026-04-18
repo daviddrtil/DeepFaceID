@@ -210,5 +210,18 @@ __marimo__/
 /src/outputs/
 /src/passive/weights/**
 
+# Allow demo videos
+/src/recordings/**
+!/src/recordings/real_daviddrtil_cover_eye.mp4
+!/src/recordings/fake_deepfacelive_cover_eye.mp4
+!/src/recordings/fake_facefusion_cover_eye.mp4
+!/src/recordings/real1.mp4
+!/src/recordings/real2.mp4
+!/src/recordings/real3.mp4
+!/src/recordings/fake1.mp4
+!/src/recordings/fake2.mp4
+!/src/recordings/fake3.mp4
+!!/src/recordings/fake4_extreme_angles.mp4
+
 cert.pem
 key.pem

@@ -11,9 +11,15 @@ const actionPrompt = document.getElementById('action-prompt');
 const progressFill = document.getElementById('progress-fill');
 const statusText = document.getElementById('status-text');
 const finalStatus = document.getElementById('final-status');
-const finalMessage = document.getElementById('final-message');
+const confidenceDisplay = document.getElementById('confidence-display');
 const successSound = document.getElementById('success-sound');
 const failSound = document.getElementById('fail-sound');
+const sessionNameInput = document.getElementById('session-name');
+const sessionError = document.getElementById('session-error');
+const deepfakeLabelCheckbox = document.getElementById('deepfake-label-checkbox');
+
+const LAST_SESSION_NAME_KEY = 'deepfaceid:last-session-name';
+const LAST_DEEPFAKE_LABEL_KEY = 'deepfaceid:last-deepfake-label';
 
 let ws = null;
 let stream = null;
@@ -23,6 +29,27 @@ let drawInterval = null;
 let lastCompletedAction = null;
 let lastServerData = null;
 let canvasInitialized = false;
+let currentDeepfakeLabel = null;
+
+let target_fps = 30;
+let frameCaptureInterval = 1000 / target_fps;
+
+function sanitizeSessionName(name) {
+    return name.trim().replace(/\s+/g, '_').toLowerCase();
+}
+
+function showSessionError(message) {
+    sessionError.textContent = message;
+    sessionError.classList.remove('hidden');
+    sessionNameInput.classList.add('input-error');
+    startBtn.disabled = true;
+}
+
+function clearSessionError() {
+    sessionError.classList.add('hidden');
+    sessionNameInput.classList.remove('input-error');
+    startBtn.disabled = false;
+}
 
 function showScreen(screen) {
     [startScreen, mainScreen, completionScreen].forEach(s => s.classList.remove('active'));
@@ -32,7 +59,11 @@ function showScreen(screen) {
 async function requestCamera() {
     try {
         stream = await navigator.mediaDevices.getUserMedia({
-            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }    // TODO: fix camera resolution
+            video: {
+                facingMode: 'user',
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
+            }
         });
         webcam.srcObject = stream;
         await webcam.play();
@@ -44,9 +75,11 @@ async function requestCamera() {
     }
 }
 
-function connectWebSocket() {
+function connectWebSocket(sessionName, deepfakeLabel) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+    const encodedName = encodeURIComponent(sessionName);
+    const encodedLabel = encodeURIComponent(deepfakeLabel || '');
+    ws = new WebSocket(`${protocol}//${window.location.host}/ws?session_name=${encodedName}&deepfake_label=${encodedLabel}`);
 
     ws.onopen = () => {
         console.log('WebSocket connected');
@@ -71,7 +104,7 @@ function connectWebSocket() {
 }
 
 function startFrameCapture() {
-    frameInterval = setInterval(captureAndSendFrame, 100);
+    frameInterval = setInterval(captureAndSendFrame, frameCaptureInterval);
 }
 
 function stopFrameCapture() {
@@ -83,7 +116,7 @@ function stopFrameCapture() {
 
 function startDrawLoop() {
     ctx = overlay.getContext('2d');
-    drawInterval = setInterval(drawOverlay, 33);
+    drawInterval = setInterval(drawOverlay, frameCaptureInterval);
 }
 
 function stopDrawLoop() {
@@ -95,9 +128,30 @@ function stopDrawLoop() {
 
 function initCanvasSize() {
     if (webcam.videoWidth === 0) return false;
-    if (canvasInitialized && overlay.width === webcam.videoWidth) return true;
-    overlay.width = webcam.videoWidth;
-    overlay.height = webcam.videoHeight;
+    
+    const container = webcam.parentElement;
+    const containerW = container.clientWidth;
+    const containerH = container.clientHeight;
+    const videoW = webcam.videoWidth;
+    const videoH = webcam.videoHeight;
+    
+    const containerAspect = containerW / containerH;
+    const videoAspect = videoW / videoH;
+    
+    let displayW, displayH;
+    if (videoAspect > containerAspect) {
+        displayW = containerW;
+        displayH = containerW / videoAspect;
+    } else {
+        displayH = containerH;
+        displayW = containerH * videoAspect;
+    }
+    
+    overlay.width = videoW;
+    overlay.height = videoH;
+    overlay.style.width = displayW + 'px';
+    overlay.style.height = displayH + 'px';
+    
     canvasInitialized = true;
     return true;
 }
@@ -110,8 +164,6 @@ function captureAndSendFrame() {
     tempCanvas.width = webcam.videoWidth;
     tempCanvas.height = webcam.videoHeight;
     const tempCtx = tempCanvas.getContext('2d');
-    tempCtx.translate(tempCanvas.width, 0);
-    tempCtx.scale(-1, 1);
     tempCtx.drawImage(webcam, 0, 0);
 
     const dataUrl = tempCanvas.toDataURL('image/jpeg', 0.7);
@@ -144,7 +196,7 @@ function handleServerResponse(data) {
         if (data.completed_action && data.completed_action !== lastCompletedAction) {
             lastCompletedAction = data.completed_action;
             playSuccessSound();
-            showActionCompleteFlash(getMirroredActionName(data.completed_action));
+            showActionCompleteFlash(data.completed_action);
         }
 
         if (data.final) {
@@ -153,20 +205,9 @@ function handleServerResponse(data) {
     }
 }
 
-const MIRRORED_ACTIONS = {
-    'Cover Left Eye': 'Cover Right Eye',
-    'Cover Right Eye': 'Cover Left Eye',
-    'Turn Head Left': 'Turn Head Right',
-    'Turn Head Right': 'Turn Head Left',
-};
-
-function getMirroredActionName(action) {
-    return MIRRORED_ACTIONS[action] || action;
-}
-
 function updateUI(data) {
     if (data.action) {
-        actionPrompt.textContent = getMirroredActionName(data.action);
+        actionPrompt.textContent = data.action;
     } else {
         actionPrompt.textContent = '';
     }
@@ -183,6 +224,42 @@ function drawOverlay() {
 
     const faceDetected = lastServerData ? lastServerData.face_detected : false;
     drawAlignmentCircle(faceDetected);
+    drawDeepfakeScore();
+}
+
+function getScoreColor(score) {
+    if (score < 0.20) return '#00ff88';
+    if (score <= 0.50) return '#ffcc00';
+    return '#ff4444';
+}
+
+function drawDeepfakeScore() {
+    if (!lastServerData) return;
+    const score = lastServerData.passive_score_smooth;
+    if (score === undefined || score === null) return;
+
+    const pct = Math.round(score * 100);
+    const text = `Deepfake Score: ${pct} %`;
+    const w = overlay.width;
+    const fontSize = 28;
+
+    ctx.save();
+    ctx.scale(-1, 1);
+    ctx.translate(-w, 0);
+
+    ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+    const metrics = ctx.measureText(text);
+    const x = 20;
+    const y = 20 + fontSize;
+    const pad = 8;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(x - pad, y - fontSize - pad / 2, metrics.width + pad * 2, fontSize + pad * 2);
+
+    ctx.fillStyle = getScoreColor(score);
+    ctx.fillText(text, x, y);
+
+    ctx.restore();
 }
 
 function drawAlignmentCircle(faceDetected) {
@@ -192,20 +269,8 @@ function drawAlignmentCircle(faceDetected) {
     const centerY = h / 2 - h * 0.05;
     const radius = Math.min(w, h) * 0.35;
 
-    // Get actual displayed size to compensate for CSS stretching
-    const displayedWidth = overlay.clientWidth || w;
-    const displayedHeight = overlay.clientHeight || h;
-    const scaleX = displayedWidth / w;
-    const scaleY = displayedHeight / h;
-
-    ctx.save();
-    ctx.translate(centerX, centerY);
-    // Compensate for non-uniform scaling by CSS
-    ctx.scale(scaleY / scaleX, 1);
     ctx.beginPath();
-    ctx.arc(0, 0, radius, 0, 2 * Math.PI);
-    ctx.restore();
-
+    ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
     ctx.strokeStyle = faceDetected ? '#00ff88' : 'rgba(255, 255, 255, 0.5)';
     ctx.lineWidth = 3;
     ctx.setLineDash(faceDetected ? [] : [10, 10]);
@@ -232,9 +297,19 @@ function showCompletion(data) {
     stopDrawLoop();
     if (ws) ws.close();
 
-    finalStatus.textContent = data.status === 'pass' ? 'AUTHORIZED' : 'FAILED';
+    finalStatus.textContent = data.status_text;
     finalStatus.className = data.status;
-    finalMessage.textContent = data.status_text;
+
+    const score = data.deepfake_score;
+    if (score !== undefined && score !== null) {
+        const pct = (score * 100).toFixed(0);
+        const color = getScoreColor(score);
+        confidenceDisplay.textContent = `Deepfake Score: ${pct}%`;
+        confidenceDisplay.style.color = color;
+        confidenceDisplay.className = 'confidence-display';
+    } else {
+        confidenceDisplay.textContent = '';
+    }
 
     if (data.status === 'pass') {
         playSuccessSound();
@@ -257,19 +332,60 @@ function reset() {
     lastCompletedAction = null;
     lastServerData = null;
     canvasInitialized = false;
+    currentDeepfakeLabel = null;
+    clearSessionError();
+    permissionError.classList.add('hidden');
     showScreen(startScreen);
 }
 
 async function startVerification() {
+    const sanitizedSessionName = sanitizeSessionName(sessionNameInput.value || '');
+    if (!sanitizedSessionName) {
+        showSessionError('* Please enter your name before starting.');
+        return;
+    }
+    clearSessionError();
+    sessionNameInput.value = sanitizedSessionName;
+    localStorage.setItem(LAST_SESSION_NAME_KEY, sanitizedSessionName);
+
+    const isDeepfake = deepfakeLabelCheckbox.checked;
+    currentDeepfakeLabel = isDeepfake ? 'fake' : 'real';
+    localStorage.setItem(LAST_DEEPFAKE_LABEL_KEY, isDeepfake ? 'true' : 'false');
+
     permissionError.classList.add('hidden');
 
     const cameraOk = await requestCamera();
     if (!cameraOk) return;
 
     showScreen(mainScreen);
-    connectWebSocket();
+    connectWebSocket(sanitizedSessionName, currentDeepfakeLabel);
 }
 
+function restoreLastSessionName() {
+    const lastName = localStorage.getItem(LAST_SESSION_NAME_KEY);
+    if (lastName) {
+        sessionNameInput.value = lastName;
+    }
+    const lastLabel = localStorage.getItem(LAST_DEEPFAKE_LABEL_KEY);
+    if (lastLabel === 'true') {
+        deepfakeLabelCheckbox.checked = true;
+    }
+}
+
+sessionNameInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        startVerification();
+    }
+});
+
+sessionNameInput.addEventListener('input', () => {
+    if (sessionNameInput.value.trim()) {
+        clearSessionError();
+    }
+});
+
+restoreLastSessionName();
 startBtn.addEventListener('click', startVerification);
 resetBtn.addEventListener('click', reset);
 tryAgainBtn.addEventListener('click', reset);

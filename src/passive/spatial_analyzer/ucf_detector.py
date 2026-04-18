@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 from passive.spatial_analyzer.xception import Xception
 
+_ucf_instance = None
+
 
 class Conv2d1x1(nn.Module):
     def __init__(self, in_f, hidden_dim, out_f):
@@ -35,6 +37,13 @@ class Head(nn.Module):
         x_feat = self.pool(x).view(bs, -1)
         logits = self.do(self.mlp(x_feat))
         return logits, x_feat
+
+
+def get_ucf_detector(device):
+    global _ucf_instance
+    if _ucf_instance is None:
+        _ucf_instance = UCFDetector(device)
+    return _ucf_instance
 
 
 class UCFDetector(nn.Module):

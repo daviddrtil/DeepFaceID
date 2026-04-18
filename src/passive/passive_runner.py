@@ -1,119 +1,139 @@
-from collections import deque
 import random
-import torch
 import time
-
-from passive.analyzer_worker import AnalyzerWorker
-from passive.spatial_analyzer.ucf_detector import UCFDetector
-from passive.passive_score_aggregator import PassiveScoreAggregator
+import torch
+from collections import deque
+from dataclasses import dataclass
+from passive.passive_analyzer import PassiveAnalyzer, AnalyzerResult
+from passive.spatial_analyzer.ucf_detector import get_ucf_detector
+from passive.temporal_analyzer.cvit_detector import get_cvit_detector, WINDOW_SIZE, INFERENCE_STEP, FAKE_THRESHOLD
+from core.decision_logic import PASSIVE_WEIGHTS
 
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-DEEPFAKE_SCORE_THRESHOLD = 0.50
-SMOOTHING_WINDOW = 5
 
 
-class SpatialAnalyzer:
-    def __init__(self):
-        self.detector = UCFDetector(DEVICE)
-        self.recent_scores = deque(maxlen=SMOOTHING_WINDOW)
+@dataclass
+class PassiveResult:
+    spatial: AnalyzerResult
+    frequency: AnalyzerResult
+    temporal: AnalyzerResult
+    score_cur: float = None
+    score_avg: float = None
+    score_max: float = None
+    score_smooth: float = None
 
-    def run(self, passive_input):
-        input_tensor = passive_input.get("passive_face_input")
-        if input_tensor is None:
+    def __post_init__(self):
+        self.score_cur = self._weighted('current_score', PASSIVE_WEIGHTS)
+        self.score_avg = self._weighted('avg_score', PASSIVE_WEIGHTS)
+        self.score_max = self._weighted('max_score', PASSIVE_WEIGHTS)
+
+    def _weighted(self, attr, weights):
+        total, weight = 0.0, 0.0
+        for key, w in weights.items():
+            score = getattr(getattr(self, key), attr)
+            if score is not None:
+                total += score * w
+                weight += w
+        return total / weight if weight else None
+
+
+class SpatialAnalyzer(PassiveAnalyzer):
+    def __init__(self, queue_size):
+        super().__init__(queue_size)
+        self.detector = get_ucf_detector(DEVICE)
+
+    def predict(self, passive_input):
+        tensor = passive_input.get("passive_face_input")
+        if tensor is None:
             return None
-        raw_score = self.detector.predict(input_tensor.to(DEVICE))
-        return raw_score
-        # self.recent_scores.append(float(raw_score))   # TODO: consider using SMOOTHING_WINDOW
-        # return float(sum(self.recent_scores) / len(self.recent_scores))
+        return self.detector.predict(tensor.to(DEVICE))
 
 
-class FrequencyAnalyzer:
-    def run(self, passive_input):
-        fps = random.uniform(10, 20)
+class FrequencyAnalyzer(PassiveAnalyzer):
+    def __init__(self, queue_size):
+        super().__init__(queue_size)
+
+    def predict(self, passive_input):
+        fps = random.uniform(100, 200)
         time.sleep(1.0 / fps)
         return random.uniform(0.4, 0.6)
 
 
-class TemporalAnalyzer:
-    def run(self, passive_input):
-        fps = random.uniform(5, 10)
-        time.sleep(1.0 / fps)
-        return random.uniform(0.4, 0.6)
+class TemporalAnalyzer(PassiveAnalyzer):
+    def __init__(self, queue_size):
+        super().__init__(queue_size)
+        self.detector = get_cvit_detector(DEVICE)
+        self._frame_buffer: list = []  # accumulates tensors for sliding window
+        self._frames_since_last = 0    # frames received since last prediction
+
+    def predict(self, passive_input):
+        tensor = passive_input.get("cvit_face_tensor")
+        if tensor is None:
+            return None
+
+        self._frame_buffer.append(tensor)
+        self._frames_since_last += 1
+
+        if len(self._frame_buffer) < WINDOW_SIZE:
+            return None
+
+        if self._frames_since_last < INFERENCE_STEP:
+            return None
+
+        # Sliding window: use last WINDOW_SIZE frames, predict every INFERENCE_STEP
+        self._frames_since_last = 0
+        score = self.detector.predict_window(self._frame_buffer[-WINDOW_SIZE:])
+        self._frame_buffer = self._frame_buffer[-WINDOW_SIZE:]  # trim for memory
+        return score
+
+    def reset(self):
+        super().reset()
+        self._frame_buffer = []
+        self._frames_since_last = 0
 
 
 class PassiveRunner:
     def __init__(self):
-        self.spatial_worker = AnalyzerWorker(SpatialAnalyzer(), queue_size=2)
-        self.frequency_worker = AnalyzerWorker(FrequencyAnalyzer(), queue_size=4)
-        self.temporal_worker = AnalyzerWorker(TemporalAnalyzer(), queue_size=16)
-        self.score_aggregator = PassiveScoreAggregator()
-
-        self.latest_result = None
-        self.last_frame_counts = (None, None, None)
-
-        self.score_count = 0
-        self.sum_spatial_score = 0.0
-        self.sum_frequency_score = 0.0
-        self.sum_temporal_score = 0.0
-        self.sum_aggregated_score = 0.0
+        self.spatial = SpatialAnalyzer(queue_size=4)
+        self.frequency = FrequencyAnalyzer(queue_size=4)
+        self.temporal = TemporalAnalyzer(queue_size=8)
+        self._workers = (self.spatial, self.frequency, self.temporal)
+        self._score_window = deque(maxlen=5)    # smooth window
 
     def start(self):
-        self.spatial_worker.start()
-        self.frequency_worker.start()
-        self.temporal_worker.start()
+        for worker in self._workers:
+            worker.start()
 
     def submit(self, passive_input):
-        self.spatial_worker.submit(passive_input)
-        self.frequency_worker.submit(passive_input)
-        self.temporal_worker.submit(passive_input)
+        if passive_input.get("passive_face_input") is not None:
+            self.spatial.submit(passive_input)
+            self.frequency.submit(passive_input)
+        if passive_input.get("cvit_face_tensor") is not None:
+            self.temporal.submit(passive_input)
 
-    def get_latest_result(self):
-        results = (
-            self.spatial_worker.get_latest(),
-            self.frequency_worker.get_latest(),
-            self.temporal_worker.get_latest()
-        )
-        if None in results:
-            return self.latest_result
-
-        current_counts = tuple(result["frame_count"] for result in results)
-        if current_counts == self.last_frame_counts:
-            return self.latest_result
-
-        s, f, t = (result["score"] for result in results)
-        self.sum_spatial_score += s
-        self.sum_frequency_score += f
-        self.sum_temporal_score += t
-        self.last_frame_counts = current_counts
-        self.score_count += 1
-
-        score_raw = self.score_aggregator.run(s, f, t)
-        self.sum_aggregated_score += score_raw
-        score_avg = self.sum_aggregated_score / self.score_count
-
-        self.latest_result = {
-            "score_raw": score_raw,
-            "score_avg": score_avg,
-            "spatial": s,
-            "frequency": f,
-            "temporal": t,
-            "frame_count": current_counts[0]
-        }
-        return self.latest_result
+    def get_passive_result(self):
+        spatial = self.spatial.get_result()
+        frequency = self.frequency.get_result(ref_frame=spatial.current_frame)
+        temporal = self.temporal.get_result(ref_frame=spatial.current_frame)
+        result = PassiveResult(spatial=spatial, frequency=frequency, temporal=temporal)
+        if result.score_cur is not None:
+            self._score_window.append(result.score_cur)
+        if self._score_window:
+            result.score_smooth = sum(self._score_window) / len(self._score_window)
+        return result
 
     def stop(self):
-        self.spatial_worker.stop()
-        self.frequency_worker.stop()
-        self.temporal_worker.stop()
+        for worker in self._workers:
+            worker.stop()
 
-        if not self.score_count:
-            print("Average passive scores: spatial=N/A frequency=N/A temporal=N/A")
-            return
+    def reset(self):
+        for worker in self._workers:
+            worker.reset()
+        self._score_window.clear()
 
-        print(
-            f"Average passive scores: "
-            f"spatial={self.sum_spatial_score / self.score_count:.4f} "
-            f"frequency={self.sum_frequency_score / self.score_count:.4f} "
-            f"temporal={self.sum_temporal_score / self.score_count:.4f}"
-        )
+    def get_temporal_window_stats(self):
+        buf = self.temporal.get_score_buffer()
+        if not buf:
+            return None
+        windows = [v for _, v in sorted(buf.items())]
+        return max(windows), sum(1 for m in windows if m >= FAKE_THRESHOLD), len(windows)

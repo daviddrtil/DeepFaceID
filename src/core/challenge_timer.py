@@ -1,15 +1,20 @@
 class ChallengeTimer:
-    def __init__(self, hold_duration_seconds=1.0, fail_timeout_seconds=10.0):
-        self.hold_duration_ms = int(hold_duration_seconds * 1000)
+    def __init__(self, hold_duration_seconds=1.5, fail_timeout_seconds=15.0):
+        self.default_hold_duration_ms = int(hold_duration_seconds * 1000)
+        self.hold_duration_ms = self.default_hold_duration_ms
         self.hold_start_ms = None
         self.fail_timeout_ms = int(fail_timeout_seconds * 1000)
         self.action_start_ms = None
         self.failed = False
 
-    def reset(self):
+    def reset(self, action=None):
         self.hold_start_ms = None
         self.action_start_ms = None
         self.failed = False
+        if hasattr(action, 'duration_seconds'):
+            self.hold_duration_ms = int(action.duration_seconds * 1000)
+        else:
+            self.hold_duration_ms = self.default_hold_duration_ms
 
     def update(self, matched, timestamp_ms):
         current_ms = int(timestamp_ms)

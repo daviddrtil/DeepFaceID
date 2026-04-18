@@ -12,6 +12,18 @@
         <div class="content">
             <h1>DeepFaceID</h1>
             <p>Face Liveness Verification</p>
+            <input id="session-name" class="text-input" type="text" placeholder="Enter your name" autocomplete="name">
+            <p id="session-error" class="error hidden"></p>
+
+            <!-- Deepfake Label Toggle -->
+            <div class="label-toggle-section">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="deepfake-label-checkbox">
+                    <span class="toggle-slider"></span>
+                    <span class="toggle-label">Deepfake session</span>
+                </label>
+            </div>
+
             <button id="start-btn" class="btn-primary">Start Verification</button>
             <p id="permission-error" class="error hidden"></p>
         </div>
@@ -37,7 +49,7 @@
     <div id="completion-screen" class="screen">
         <div class="content">
             <div id="final-status"></div>
-            <p id="final-message"></p>
+            <p id="confidence-display" class="confidence-display"></p>
             <button id="try-again-btn" class="btn-primary">Try Again</button>
         </div>
     </div>
