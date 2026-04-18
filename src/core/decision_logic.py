@@ -132,6 +132,6 @@ class DecisionLogic:
         if passive_ok and identity_ok:
             return {**base, 'status': 'pass', 'display_status': 'Authorized', 'interactive_complete': True}
 
-        # display_status = 'Identity Inconsistent' if not identity_ok else 'Failed'
-        display_status = 'Failed'
+        # display_status = 'Identity Inconsistent' if not identity_ok else 'Not Authorized'
+        display_status = 'Not Authorized'
         return {**base, 'status': 'fail', 'display_status': display_status, 'interactive_complete': True}
