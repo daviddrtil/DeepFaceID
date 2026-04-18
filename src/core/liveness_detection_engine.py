@@ -38,6 +38,7 @@ class LivenessDetectionEngine:
         self._last_output_frame_count = None
         self._latest_passive_result = None
         self._latest_identity_result = None
+        self._latest_deepfake_score = None
         self.final_status = None
         self._video_writer_initialized = False
 
@@ -127,23 +128,13 @@ class LivenessDetectionEngine:
                 timeout_failed = self.challenge_timer.failed and not self.challenge_generator.is_finished()
                 decision = self._process_frame(frame_count, preprocessed, interactive_result, identity_result, decision_action, actions_completed, actions_total, timeout_failed)
                 passive_result = decision.get('passive')
-                spatial_frame = passive_result.spatial.current_frame if passive_result else 0
-                passive_delay = frame_count - spatial_frame if passive_result else 0
                 if decision['status'] in ('pass', 'fail'):
                     self.final_status = decision
                     if self.video_input.is_live:
                         break
 
                 if frame_count % 30 == 0:
-                    elapsed = time.time() - start_time
-                    fps = processed_count / elapsed if elapsed > 0 else 0
-                    p_cur = passive_result.score_cur if passive_result else None
-                    p_avg = passive_result.score_avg if passive_result else None
-                    cur_pct = f"{p_cur * 100:2.0f}%" if p_cur is not None else "N/A"
-                    avg_pct = f"{p_avg * 100:2.0f}%" if p_avg is not None else "N/A"
-                    id_sim = f"{identity_result.similarity * 100:2.0f}%" if identity_result and identity_result.similarity is not None else "N/A"
-                    id_drift = f"{identity_result.drift:.3f}" if identity_result and identity_result.drift is not None else "N/A"
-                    print(f"frame={frame_count:04d} fps={fps:2.0f} passive_current={cur_pct} passive_avg={avg_pct} delay={passive_delay} identity={id_sim} drift={id_drift}")
+                    self._log_progress(frame_count, time.time() - start_time, processed_count, passive_result, identity_result)
 
                 processed_count += 1
         finally:
@@ -153,8 +144,13 @@ class LivenessDetectionEngine:
             if self.final_status:
                 final_decision = 'timeout' if self.final_status.get('display_status') == 'Action Timeout' else self.final_status.get('status')
                 deepfake_score = self.final_status.get('deepfake_score')
-            self.statistics_writer.write_summary(self._latest_passive_result, self._latest_identity_result, final_decision, settings.config.deepfake_label, deepfake_score)
-            summary = StatisticsWriter.format_summary(self._latest_passive_result, self._latest_identity_result, final_decision, settings.config.deepfake_label, deepfake_score)
+
+            temporal_window_stats = self.passive_runner.get_temporal_window_stats()
+            final_deepfake = deepfake_score if deepfake_score is not None else self._latest_deepfake_score
+            summary = self.statistics_writer.write_summary(
+                self._latest_passive_result, self._latest_identity_result,
+                final_decision, settings.config.deepfake_label, final_deepfake, temporal_window_stats,
+            )
             print(f"--- SUMMARY ---\n{summary}")
             self.statistics_writer.close()
             self.video_input.stop()
@@ -162,6 +158,23 @@ class LivenessDetectionEngine:
             self.identity_tracker.stop()
             self._stop_outputs()
             print(f"Total {self._last_frame_count} frames (interactive processed: {processed_count} frames) in {time.time() - start_time:.1f}s")
+
+    def _log_progress(self, frame_count, elapsed, processed_count, passive_result, identity_result):
+        def pct(v): return f"{v * 100:2.0f}%" if v is not None else "N/A"
+        fps = processed_count / elapsed if elapsed > 0 else 0
+        p_cur = passive_result.score_cur if passive_result else None
+        p_avg = passive_result.score_avg if passive_result else None
+        p_s = passive_result.spatial.current_score if passive_result else None
+        p_f = passive_result.frequency.current_score if passive_result else None
+        p_t = passive_result.temporal.current_score if passive_result else None
+        id_score = identity_result.identity_score if identity_result else None
+        id_min_sim = identity_result.min_similarity if identity_result else None
+        print(
+            f"frame={frame_count:04d} fps={fps:2.0f}"
+            f" | deepfake_score={pct(self._latest_deepfake_score)} passive_avg={pct(p_avg)} passive_cur={pct(p_cur)}"
+            f" | spatial={pct(p_s)} frequency={pct(p_f)} temporal={pct(p_t)}"
+            f" | identity_score={pct(id_score)} min_similarity={pct(id_min_sim)}"
+        )
 
     def _send_web_overlay(self, interactive_result, passive_result, identity_result, action, decision, completed, total, overlay):
         if not self.web_output:
@@ -190,6 +203,7 @@ class LivenessDetectionEngine:
         if passive_result is not None:
             self._latest_passive_result = passive_result
         decision = self.decision_logic.fuse(passive_result, identity_result, completed, total, timeout_failed, passive_runner=self.passive_runner)
+        self._latest_deepfake_score = decision.get('deepfake_score')
         passive_delay_frames = frame_count - passive_result.spatial.current_frame if passive_result else 0
         overlay = {
             'current_action': action,

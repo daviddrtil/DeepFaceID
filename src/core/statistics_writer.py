@@ -65,7 +65,7 @@ class StatisticsWriter:
         self.file.flush()
 
     @staticmethod
-    def format_summary(passive_result, identity_result, final_decision, deepfake_label, deepfake_score=None):
+    def format_summary(passive_result, identity_result, final_decision, deepfake_label, deepfake_score=None, temporal_window_stats=None):
         lines = []
         if passive_result:
             s = f"{passive_result.spatial.avg_score:.4f}" if passive_result.spatial.avg_score else "N/A"
@@ -74,33 +74,24 @@ class StatisticsWriter:
             s_max = f"{passive_result.spatial.max_score:.4f}" if passive_result.spatial.max_score else "N/A"
             f_max = f"{passive_result.frequency.max_score:.4f}" if passive_result.frequency.max_score else "N/A"
             t_max = f"{passive_result.temporal.max_score:.4f}" if passive_result.temporal.max_score else "N/A"
-            lines.append(
-                f"Average passive scores: spatial={s}({passive_result.spatial.total_count}) "
-                f"frequency={f}({passive_result.frequency.total_count}) "
-                f"temporal={t}({passive_result.temporal.total_count})"
-            )
-            lines.append(
-                f"Max passive scores: spatial={s_max} frequency={f_max} temporal={t_max}"
-            )
+            lines.append(f"Average passive scores: spatial={s}({passive_result.spatial.total_count}) frequency={f}({passive_result.frequency.total_count}) temporal={t}({passive_result.temporal.total_count})")
+            lines.append(f"Max passive scores: spatial={s_max} frequency={f_max} temporal={t_max}")
+        if temporal_window_stats is not None:
+            max_w, fake_w, total_w = temporal_window_stats
+            lines.append(f"Temporal windowed: max_window={max_w:.4f} fake_windows(>=0.85)={fake_w}/{total_w}")
         if identity_result:
-            lines.append(
-                f"Identity: avg_similarity={identity_result.avg_similarity:.4f} "
-                f"min_similarity={identity_result.min_similarity:.4f} "
-                f"drift={identity_result.drift:.4f} "
-                f"identity_score={identity_result.identity_score:.4f} "
-                f"embeddings={identity_result.embedding_count}"
-            )
+            lines.append(f"Identity: avg_similarity={identity_result.avg_similarity:.4f} min_similarity={identity_result.min_similarity:.4f} drift={identity_result.drift:.4f} identity_score={identity_result.identity_score:.4f} embeddings={identity_result.embedding_count}")
         if deepfake_score is not None:
             lines.append(f"deepfake_score={deepfake_score:.4f}")
         lines.append(f"label={deepfake_label or 'unknown'}")
         lines.append(f"final_decision={final_decision or 'unknown'}")
         return "\n".join(lines)
 
-    def write_summary(self, passive_result, identity_result, final_decision, deepfake_label, deepfake_score=None):
-        self.file.write("\n--- SUMMARY ---\n")
-        self.file.write(self.format_summary(passive_result, identity_result, final_decision, deepfake_label, deepfake_score))
-        self.file.write("\n")
+    def write_summary(self, passive_result, identity_result, final_decision, deepfake_label, deepfake_score=None, temporal_window_stats=None):
+        summary = self.format_summary(passive_result, identity_result, final_decision, deepfake_label, deepfake_score, temporal_window_stats)
+        self.file.write(f"\n--- SUMMARY ---\n{summary}\n")
         self.file.flush()
+        return summary
 
     def close(self):
         if not self.file.closed:

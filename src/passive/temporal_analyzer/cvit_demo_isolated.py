@@ -5,10 +5,11 @@ Preprocessing matches the original pred_func.py pipeline:
   - MediaPipe FaceDetection for bounding-box crop (replaces dlib/face_recognition)
   - 10 px padding, INTER_AREA resize to 224x224
   - float32 / 255, ImageNet normalize
-  - Batch sigmoid inference, mean over frames, argmax (real_or_fake logic)
+  - Windowed batch inference: window_size (default 15) frames per batch,
+    sigmoid -> mean within window (mirrors original pred_vid / max_prediction_value)
+  - Decision: maximum fake-probability across all windows (robust to partial fakes)
 
-Optimisation: every 16th frame is sampled (no overlap) and the whole sequence
-is fed to the model in a single forward pass.
+Use --skip 1 (default) to process every frame; increase for faster preview.
 """
 import argparse
 import os
@@ -160,7 +161,7 @@ class FaceDetector:
     Replicates the original face_recognition / dlib approach from pred_func.py:
       1. Detect the largest face in the frame.
       2. Expand the bbox by `padding` pixels on each side.
-      3. Crop and resize to 224×224 with INTER_AREA.
+      3. Crop and resize to 224x224 with INTER_AREA.
     Returns a uint8 RGB numpy array (224, 224, 3), or None if no face found.
     """
 
@@ -219,8 +220,8 @@ def load_cvit_model(weights_path, device):
     return model
 
 
-def extract_frames(video_path, skip):
-    """Read video and return every `skip`-th frame (no overlap)."""
+def extract_frames(video_path, skip=1):
+    """Read video and return every `skip`-th frame (1 = all frames)."""
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         raise RuntimeError(f"Could not open video: {video_path}")
@@ -241,12 +242,23 @@ def extract_frames(video_path, skip):
             indices.append(idx)
         idx += 1
     cap.release()
-    print(f"  Sampled {len(frames)} frames (every {skip}th from {idx} total)")
+    skip_desc = "all" if skip == 1 else f"every {skip}th"
+    print(f"  Extracted {len(frames)} frames ({skip_desc} of {idx} total)")
     return frames, indices
 
 
-def process_video(video_path, model, detector, device, skip):
-    """Run full CViT2 deepfake detection pipeline on one video."""
+def process_video(video_path, model, detector, device, skip, window_size, fake_threshold):
+    """Run full CViT2 deepfake detection pipeline on one video.
+
+    Frames are extracted (skip=1 recommended for no frame dropping).
+    Faces are then processed in non-overlapping windows of `window_size` frames,
+    matching the original 15-frame batch inference from pred_func.py (pred_vid).
+
+    Decision logic:
+      - Per window: sigmoid(logits) -> mean across frames (original pred_vid logic)
+      - Final: maximum fake-prob across all windows (robust to partial/spliced fakes)
+        Any window mean > 0.5 flags the video as FAKE.
+    """
     print(f"\n{'=' * 60}")
     print(f"  Video: {video_path.name}")
     print(f"{'=' * 60}")
@@ -260,7 +272,7 @@ def process_video(video_path, model, detector, device, skip):
         return None
 
     # --- face detection & crop (original bbox approach) ---
-    print(f"  Detecting faces (MediaPipe bbox)...")
+    print(f"  Detecting faces (MediaPipe bbox, padding={detector.padding}px)...")
     face_tensors, face_indices, failed = [], [], 0
     t_face = time.time()
 
@@ -271,8 +283,9 @@ def process_video(video_path, model, detector, device, skip):
             face_indices.append(frame_idx)
         else:
             failed += 1
-        if (i + 1) % 20 == 0 or i == len(frames) - 1:
-            print(f"    {i + 1}/{len(frames)} frames | {len(face_tensors)} faces, {failed} missed")
+        if (i + 1) % 100 == 0 or i == len(frames) - 1:
+            print(f"    {i + 1}/{len(frames)} frames processed | "
+                  f"{len(face_tensors)} faces found, {failed} missed")
 
     face_time = time.time() - t_face
     print(f"  Face extraction: {face_time:.2f}s "
@@ -282,53 +295,96 @@ def process_video(video_path, model, detector, device, skip):
         print("  ERROR: No faces detected in any frame!")
         return None
 
-    # --- CViT2 batch inference (matches pred_vid in pred_func.py) ---
-    batch = torch.stack(face_tensors).to(device)
-    print(f"  Running CViT2 inference on {batch.shape[0]} face crops...")
+    # --- windowed CViT2 inference ---
+    # Mirrors original: pred_vid -> sigmoid(model(batch)) -> mean -> argmax
+    # Uses non-overlapping windows of window_size frames (default 15).
+    n_faces = len(face_tensors)
+    n_windows = (n_faces + window_size - 1) // window_size
+    print(f"  CViT2 inference: {n_faces} faces in {n_windows} windows x {window_size} frames...")
 
+    window_results = []
     t_inf = time.time()
-    with torch.no_grad():
-        logits = model(batch)          # [N, 2]
-        probs  = torch.sigmoid(logits) # [N, 2]
+
+    for w_start in range(0, n_faces, window_size):
+        w_end = min(w_start + window_size, n_faces)
+        w_tensors = face_tensors[w_start:w_end]
+        w_frame_idx = face_indices[w_start:w_end]
+
+        batch = torch.stack(w_tensors).to(device)
+        with torch.no_grad():
+            logits = model(batch)           # [W, 2]
+            probs  = torch.sigmoid(logits)  # [W, 2]  class 0=FAKE, class 1=REAL
+
+        # Mean within window -- mirrors max_prediction_value(pred_vid()) logic
+        mean_p = probs.mean(dim=0)
+        fake_p = mean_p[0].item()
+        real_p = mean_p[1].item()
+
+        per_frame = [
+            (w_frame_idx[j], probs[j, 0].item(), probs[j, 1].item())
+            for j in range(len(w_tensors))
+        ]
+        window_results.append(dict(
+            fake=fake_p, real=real_p,
+            first_frame=w_frame_idx[0], last_frame=w_frame_idx[-1],
+            num_faces=len(w_tensors), per_frame=per_frame,
+        ))
+
     inf_time = time.time() - t_inf
+    print(f"  Inference: {inf_time:.3f}s ({n_faces / max(inf_time, 1e-6):.1f} faces/s)")
 
-    # --- aggregate: replicate max_prediction_value + real_or_fake ---
-    # class 0 = FAKE, class 1 = REAL  (original XOR: pred^1 == 1 => "FAKE")
-    mean_probs = probs.mean(dim=0)
-    pred_cls = torch.argmax(mean_probs).item()
-    label  = "REAL" if pred_cls == 1 else "FAKE"
-    fake_p = mean_probs[0].item()
-    real_p = mean_probs[1].item()
+    # --- aggregate across windows ---
+    fake_ps         = [w['fake'] for w in window_results]
+    max_fake        = max(fake_ps)
+    mean_fake       = sum(fake_ps) / len(fake_ps)
+    fake_window_cnt = sum(1 for p in fake_ps if p > 0.5)
 
-    print(f"  Inference: {inf_time:.3f}s "
-          f"({len(face_tensors) / max(inf_time, 1e-6):.1f} frames/s)")
+    # Primary decision: any window mean >= fake_threshold -> FAKE.
+    # Default 0.85: a 15-frame window mean of 0.85+ means virtually every frame
+    # in that cluster scores high -- the hallmark of a genuine deepfake region.
+    # (0.5-threshold catches too many model-noise false positives on real videos.)
+    label = "FAKE" if max_fake >= fake_threshold else "REAL"
 
-    # --- per-frame predictions (all frames) ---
-    n = len(face_tensors)
-    print(f"\n  Per-frame predictions ({n} frames):")
-    for i in range(n):
-        fp, rp = probs[i, 0].item(), probs[i, 1].item()
-        verdict = "REAL" if rp > fp else "FAKE"
-        col = _fake_colour(fp)
-        print(f"    Frame {face_indices[i]:5d}:  {col}FAKE={fp:.4f}{_RESET}  REAL={rp:.4f}  -> {col}{verdict}{_RESET}")
+    # --- per-window output ---
+    print(f"\n  Per-window predictions ({len(window_results)} windows x {window_size} frames):")
+    for i, w in enumerate(window_results):
+        col     = _fake_colour(w['fake'])
+        verdict = "FAKE" if w['fake'] >= fake_threshold else "REAL"
+        flag    = "  << FAKE DETECTED" if w['fake'] >= fake_threshold \
+                  else ("  << suspicious"  if w['fake'] > 0.5 else "")
+        print(f"    Win {i + 1:3d}  "
+              f"[f{w['first_frame']:5d}-{w['last_frame']:5d}]  "
+              f"{col}FAKE={w['fake']:.4f}{_RESET}  REAL={w['real']:.4f}"
+              f"  -> {col}{verdict}{_RESET}{col}{flag}{_RESET}")
+        # Show per-frame breakdown only for fake-flagged windows
+        if w['fake'] >= fake_threshold:
+            for frmidx, fp, rp in w['per_frame']:
+                fc = _fake_colour(fp)
+                fv = "FAKE" if fp > 0.5 else "real"
+                print(f"           frame {frmidx:5d}:  "
+                      f"{fc}FAKE={fp:.4f}{_RESET}  REAL={rp:.4f}  {fc}{fv}{_RESET}")
 
     total_time = time.time() - t0
 
-    col = _fake_colour(fake_p)
-    w = 39
+    col = _fake_colour(max_fake)
+    W = 48
     def _row(text, colour=""):
-        return f"  | {colour}{text:{w - 4}s}{_RESET if colour else ''} |"
-    print(f"\n  +{'-' * (w - 2)}+")
-    print(_row(f"Prediction : {label}", col))
-    print(_row(f"FAKE prob  : {fake_p:.4f}", col))
-    print(_row(f"REAL prob  : {real_p:.4f}"))
-    print(_row(f"Frames used: {n}"))
-    print(_row(f"Total time : {total_time:.2f}s"))
-    print(f"  +{'-' * (w - 2)}+")
+        return f"  | {colour}{text:{W - 4}s}{_RESET if colour else ''} |"
+    print(f"\n  +{'-' * (W - 2)}+")
+    print(_row(f"Prediction        : {label}", col))
+    print(_row(f"Max-window FAKE   : {max_fake:.4f} (threshold={fake_threshold})", col))
+    print(_row(f"Mean-window FAKE  : {mean_fake:.4f}"))
+    print(_row(f"FAKE windows (>0.5): {fake_window_cnt} / {len(window_results)}"))
+    print(_row(f"Faces processed   : {n_faces}  (from {len(frames)} frames)"))
+    print(_row(f"Total time        : {total_time:.2f}s"))
+    print(f"  +{'-' * (W - 2)}+")
 
-    return dict(video=video_path.name, label=label,
-                fake_prob=fake_p, real_prob=real_p,
-                num_frames=n, time=total_time)
+    return dict(
+        video=video_path.name, label=label,
+        max_fake=max_fake, mean_fake=mean_fake,
+        fake_windows=fake_window_cnt, total_windows=len(window_results),
+        num_faces=n_faces, time=total_time,
+    )
 
 
 def resolve_default_paths():
@@ -355,10 +411,16 @@ def parse_args():
                    help="CViT2 checkpoint path.")
     p.add_argument("--device", type=str, default=None, choices=["cpu", "cuda"],
                    help="Inference device.")
-    p.add_argument("--skip", type=int, default=8,
-                   help="Take every N-th frame (default: 8).")
+    p.add_argument("--skip", type=int, default=1,
+                   help="Take every N-th frame (default: 1 = all frames, no skipping).")
+    p.add_argument("--window-size", type=int, default=15,
+                   help="Frames per inference window (default: 15, matching original training).")
     p.add_argument("--padding", type=int, default=10,
                    help="Face bbox padding in pixels (default: 10).")
+    p.add_argument("--fake-threshold", type=float, default=0.85,
+                   help="Min window-mean fake-prob to call FAKE (default: 0.85). "
+                        "A 15-frame window mean >=0.85 means almost every frame in "
+                        "that cluster is fake-grade -- the signature of a real deepfake.")
     return p.parse_args()
 
 
@@ -382,7 +444,7 @@ if __name__ == "__main__":
 
     results = []
     for vp in args.videos:
-        r = process_video(vp, model, detector, device, args.skip)
+        r = process_video(vp, model, detector, device, args.skip, args.window_size, args.fake_threshold)
         if r:
             results.append(r)
 
@@ -391,6 +453,7 @@ if __name__ == "__main__":
         print(f"  SUMMARY")
         print(f"{'=' * 60}")
         for r in results:
-            print(f"  {r['video']:30s} -> {r['label']:4s}  "
-                  f"(fake={r['fake_prob']:.4f}, real={r['real_prob']:.4f}, "
-                  f"{r['num_frames']} frames, {r['time']:.2f}s)")
+            col = _fake_colour(r['max_fake'])
+            print(f"  {r['video']:35s}  {col}{r['label']:4s}{_RESET}  "
+                  f"max={r['max_fake']:.4f}  mean={r['mean_fake']:.4f}  "
+                  f"fake_wins={r['fake_windows']}/{r['total_windows']}")

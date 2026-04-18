@@ -1,5 +1,5 @@
 from interactive.action_enum import get_action_category
-from passive.temporal_analyzer.cvit_detector import WINDOW_SIZE, FAKE_THRESHOLD
+from passive.temporal_analyzer.cvit_detector import CViTDetector, FAKE_THRESHOLD
 
 
 PASSIVE_WEIGHTS = {'spatial': 0.6, 'frequency': 0.0, 'temporal': 0.4}
@@ -36,16 +36,8 @@ class DecisionLogic:
         temporal_scores = [v for f, v in sorted(temporal_buf.items()) if start <= f <= frame_count]
 
         spatial_max = max(spatial_scores) if spatial_scores else 0.0
-
-        # Window temporal scores to reduce per-frame noise (matches demo)
-        if temporal_scores:
-            window_means = []
-            for i in range(0, len(temporal_scores), WINDOW_SIZE):
-                w = temporal_scores[i:i + WINDOW_SIZE]
-                window_means.append(sum(w) / len(w))
-            temporal_max = max(window_means)
-        else:
-            temporal_max = 0.0
+        window_means = CViTDetector.compute_window_scores(temporal_scores)
+        temporal_max = max(window_means) if window_means else 0.0
 
         action_score = spatial_max * 0.9 + temporal_max * 0.1
         self._action_scores.append((action_score, weight))
@@ -60,30 +52,19 @@ class DecisionLogic:
         spatial_max = passive_result.spatial.max_score if passive_result and passive_result.spatial.max_score else 0.0
         spatial_avg = passive_result.spatial.avg_score if passive_result and passive_result.spatial.avg_score else 0.0
 
-        # Windowed temporal analysis (matches demo: 15-frame windows, 0.85 threshold)
         temporal_buf = passive_runner.temporal.get_score_buffer() if passive_runner else {}
-        temporal_max_window = 0.0
+        temporal_signal = 0.0
         temporal_fake_ratio = 0.0
         if temporal_buf:
             sorted_scores = [v for _, v in sorted(temporal_buf.items())]
-            window_means = []
-            for i in range(0, len(sorted_scores), WINDOW_SIZE):
-                w = sorted_scores[i:i + WINDOW_SIZE]
-                window_means.append(sum(w) / len(w))
-            if window_means:
-                temporal_max_window = max(window_means)
-                above = sum(1 for m in window_means if m > 0.5)
-                temporal_fake_ratio = above / len(window_means)
+            windows = CViTDetector.compute_window_scores(sorted_scores)
+            max_window = max(windows)
+            temporal_fake_ratio = sum(1 for m in windows if m > 0.5) / len(windows)
+            if max_window >= FAKE_THRESHOLD:
+                temporal_signal = 1.0
+            elif max_window > 0.5:
+                temporal_signal = (max_window - 0.5) / (FAKE_THRESHOLD - 0.5) * 0.5
 
-        # Scale temporal signal: above FAKE_THRESHOLD → 1.0, suspicious → partial
-        if temporal_max_window >= FAKE_THRESHOLD:
-            temporal_signal = 1.0
-        elif temporal_max_window > 0.5:
-            temporal_signal = (temporal_max_window - 0.5) / (FAKE_THRESHOLD - 0.5) * 0.5
-        else:
-            temporal_signal = 0.0
-
-        # Identity penalty: low identity score = suspicious
         identity_penalty = 0.0
         if identity_result and identity_result.embedding_count >= 10:
             id_score = identity_result.identity_score or 0.0
