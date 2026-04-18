@@ -228,14 +228,14 @@ function drawOverlay() {
 }
 
 function getScoreColor(score) {
-    if (score < 0.40) return '#00ff88';
-    // if (score <= 0.50) return '#ffcc00';
+    if (score < 0.20) return '#00ff88';
+    if (score <= 0.50) return '#ffcc00';
     return '#ff4444';
 }
 
 function drawDeepfakeScore() {
     if (!lastServerData) return;
-    const score = lastServerData.deepfake_score;
+    const score = lastServerData.passive_score_smooth;
     if (score === undefined || score === null) return;
 
     const pct = Math.round(score * 100);
