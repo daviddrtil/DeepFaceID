@@ -1,17 +1,22 @@
+import math
 from interactive.action_enum import get_action_category
-from passive.temporal_analyzer.cvit_detector import CViTDetector, FAKE_THRESHOLD
 
 
 PASSIVE_WEIGHTS = {'spatial': 0.6, 'frequency': 0.0, 'temporal': 0.4}
 
 ACTION_WEIGHTS = {
     'complex': 2.0,
-    'occlusion': 2.0,
+    'occlusion': 1.8,
     'pose': 1.2,
     'sequence': 1.0,
     'expression': 0.8,
     'calibration': 0.5,
 }
+
+
+def _sigmoid(x, center, steepness):
+    # Calibration sigmoid: maps a raw detector score to evidence strength [0, 1]
+    return 1.0 / (1.0 + math.exp(-steepness * (x - center)))
 
 
 class DecisionLogic:
@@ -33,11 +38,10 @@ class DecisionLogic:
         temporal_buf = passive_runner.temporal.get_score_buffer()
 
         spatial_scores = [v for f, v in spatial_buf.items() if start <= f <= frame_count]
-        temporal_scores = [v for f, v in sorted(temporal_buf.items()) if start <= f <= frame_count]
+        temporal_windows = [v for f, v in sorted(temporal_buf.items()) if start <= f <= frame_count]
 
         spatial_max = max(spatial_scores) if spatial_scores else 0.0
-        window_means = CViTDetector.compute_window_scores(temporal_scores)
-        temporal_max = max(window_means) if window_means else 0.0
+        temporal_max = max(temporal_windows) if temporal_windows else 0.0
 
         action_score = spatial_max * 0.9 + temporal_max * 0.1
         self._action_scores.append((action_score, weight))
@@ -53,34 +57,43 @@ class DecisionLogic:
         spatial_avg = passive_result.spatial.avg_score if passive_result and passive_result.spatial.avg_score else 0.0
 
         temporal_buf = passive_runner.temporal.get_score_buffer() if passive_runner else {}
-        temporal_signal = 0.0
+        temporal_max = 0.0
         temporal_fake_ratio = 0.0
         if temporal_buf:
-            sorted_scores = [v for _, v in sorted(temporal_buf.items())]
-            windows = CViTDetector.compute_window_scores(sorted_scores)
-            max_window = max(windows)
+            windows = [v for _, v in sorted(temporal_buf.items())]
+            temporal_max = max(windows)
             temporal_fake_ratio = sum(1 for m in windows if m > 0.5) / len(windows)
-            if max_window >= FAKE_THRESHOLD:
-                temporal_signal = 1.0
-            elif max_window > 0.5:
-                temporal_signal = (max_window - 0.5) / (FAKE_THRESHOLD - 0.5) * 0.5
 
         identity_penalty = 0.0
         if identity_result and identity_result.embedding_count >= 10:
             id_score = identity_result.identity_score or 0.0
             identity_penalty = max(0.0, 0.70 - id_score)
 
-        signals = {
-            'action': (weighted_action, 3.0),
-            'spatial_max': (spatial_max, 2.5),
-            'spatial_avg': (min(1.0, spatial_avg * 15), 1.5),
-            'temporal_signal': (temporal_signal, 2.0),
-            'temporal_fake_ratio': (temporal_fake_ratio, 0.5),
-            'identity_penalty': (identity_penalty, 1.5),
-        }
+        # Calibrate raw detector outputs to evidence strength via sigmoid.
+        # Spatial UCF: well-separated (<0.10 real, >0.90 fake), center at 0.80
+        # Temporal CViT: noisier (0.3-0.7 real, 0.85+ fake), center at 0.75
+        spatial_evidence = _sigmoid(spatial_max, center=0.80, steepness=15)
+        temporal_evidence = _sigmoid(temporal_max, center=0.75, steepness=12)
+
+        # Weighted average of calibrated + raw signals
+        signals = {}
+        if self._action_scores:
+            signals['action'] = (weighted_action, 2.5)
+        signals['spatial_peak'] = (spatial_evidence, 2.5)
+        signals['spatial_avg'] = (min(1.0, spatial_avg * 5), 1.0)
+        signals['temporal_peak'] = (temporal_evidence, 3.0)
+        signals['temporal_consistency'] = (temporal_fake_ratio, 0.5)
+        signals['identity_penalty'] = (identity_penalty, 1.5)
 
         total_weight = sum(w for _, w in signals.values())
-        score = sum(v * w for v, w in signals.values()) / total_weight if total_weight else 0.0
+        avg_score = sum(v * w for v, w in signals.values()) / total_weight if total_weight else 0.0
+
+        # Smooth evidence boost: when a calibrated detector signal is strong,
+        # blend toward it via a sigmoid-gated alpha — avoids the hard floor
+        max_evidence = max(spatial_evidence, temporal_evidence)
+        boost_alpha = _sigmoid(max_evidence, center=0.80, steepness=20)
+        score = (1.0 - boost_alpha) * avg_score + boost_alpha * max_evidence
+
         return min(1.0, score)
 
     def fuse(self, passive_result, identity_result, actions_completed_count, actions_count, timeout_failed=False, passive_runner=None):

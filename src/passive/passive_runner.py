@@ -5,7 +5,7 @@ from collections import deque
 from dataclasses import dataclass
 from passive.passive_analyzer import PassiveAnalyzer, AnalyzerResult
 from passive.spatial_analyzer.ucf_detector import get_ucf_detector
-from passive.temporal_analyzer.cvit_detector import get_cvit_detector, WINDOW_SIZE, FAKE_THRESHOLD
+from passive.temporal_analyzer.cvit_detector import get_cvit_detector, WINDOW_SIZE, INFERENCE_STEP, FAKE_THRESHOLD
 from core.decision_logic import PASSIVE_WEIGHTS
 
 
@@ -63,7 +63,8 @@ class TemporalAnalyzer(PassiveAnalyzer):
     def __init__(self, queue_size):
         super().__init__(queue_size)
         self.detector = get_cvit_detector(DEVICE)
-        self._frame_buffer: list = []  # accumulates tensors up to WINDOW_SIZE
+        self._frame_buffer: list = []  # accumulates tensors for sliding window
+        self._frames_since_last = 0    # frames received since last prediction
 
     def predict(self, passive_input):
         tensor = passive_input.get("cvit_face_tensor")
@@ -71,17 +72,24 @@ class TemporalAnalyzer(PassiveAnalyzer):
             return None
 
         self._frame_buffer.append(tensor)
+        self._frames_since_last += 1
+
         if len(self._frame_buffer) < WINDOW_SIZE:
             return None
 
-        # run batch inference, emit one window-mean score
-        score = self.detector.predict_window(self._frame_buffer[:WINDOW_SIZE])
-        self._frame_buffer = []  # clear for next non-overlapping window
+        if self._frames_since_last < INFERENCE_STEP:
+            return None
+
+        # Sliding window: use last WINDOW_SIZE frames, predict every INFERENCE_STEP
+        self._frames_since_last = 0
+        score = self.detector.predict_window(self._frame_buffer[-WINDOW_SIZE:])
+        self._frame_buffer = self._frame_buffer[-WINDOW_SIZE:]  # trim for memory
         return score
 
     def reset(self):
         super().reset()
         self._frame_buffer = []
+        self._frames_since_last = 0
 
 
 class PassiveRunner:
