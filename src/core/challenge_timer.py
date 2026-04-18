@@ -1,5 +1,5 @@
 class ChallengeTimer:
-    def __init__(self, hold_duration_seconds=1.0, fail_timeout_seconds=15.0):
+    def __init__(self, hold_duration_seconds=1.5, fail_timeout_seconds=15.0):
         self.default_hold_duration_ms = int(hold_duration_seconds * 1000)
         self.hold_duration_ms = self.default_hold_duration_ms
         self.hold_start_ms = None
