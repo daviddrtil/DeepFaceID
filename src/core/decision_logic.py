@@ -2,7 +2,7 @@ import math
 from interactive.action_enum import get_action_category
 
 
-PASSIVE_WEIGHTS = {'spatial': 0.6, 'frequency': 0.0, 'temporal': 0.4}
+PASSIVE_WEIGHTS = {'spatial': 0.8, 'frequency': 0.0, 'temporal': 0.2}
 
 ACTION_WEIGHTS = {
     'complex': 2.0,
@@ -120,8 +120,9 @@ class DecisionLogic:
         if timeout_failed:
             return {**base, 'status': 'fail', 'display_status': 'Action Timeout', 'interactive_complete': False}
 
-        if identity_rejection:
-            return {**base, 'status': 'fail', 'display_status': 'Identity Mismatch', 'identity_ok': False, 'interactive_complete': False}
+        # TODO: reenable after system testing and experimenting, where we dont want to auto-reject
+        # if identity_rejection:
+        #     return {**base, 'status': 'fail', 'display_status': 'Identity Mismatch', 'identity_ok': False, 'interactive_complete': False}
 
         interactive_complete = actions_count > 0 and actions_completed_count >= actions_count
 
@@ -131,5 +132,6 @@ class DecisionLogic:
         if passive_ok and identity_ok:
             return {**base, 'status': 'pass', 'display_status': 'Authorized', 'interactive_complete': True}
 
-        display = 'Identity Inconsistent' if not identity_ok else 'Failed'
-        return {**base, 'status': 'fail', 'display_status': display, 'interactive_complete': True}
+        # display_status = 'Identity Inconsistent' if not identity_ok else 'Failed'
+        display_status = 'Failed'
+        return {**base, 'status': 'fail', 'display_status': display_status, 'interactive_complete': True}

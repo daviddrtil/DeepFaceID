@@ -2,14 +2,14 @@
 
 Detection of Facial Deepfakes Using Interactive Liveness Tests
 
-A real-time liveness detection system for remote identity verification that combines interactive tests (head rotation, facial occlusion, blinking, expression changes) with passive analysis (artifacts, textures, light reflections, micro-movements) to detect deepfake attacks, particularly face-swapping.
+A real-time liveness detection system for remote identity verification that combines interactive tests (head rotation, hand occlusion, expression changes) with passive analysis (artifacts, textures, light reflections, micro-movements) to detect deepfake face-swapping attacks.
 
 ---
 
 ## Features
 
-- **Interactive Liveness Tests**: Head rotation, facial occlusion, blinking, expression changes
-- **Passive Detection**: Artifact analysis, texture inconsistencies, light reflection patterns, micro-movements
+- **Interactive Liveness Tests**: Head rotation, hand occlusion, expression changes
+- **Passive Detection**: Spatial, frequency and temporal models
 - **Real-time Processing**: GPU-accelerated inference for live camera streams
 - **Web Interface**: Browser-based verification for remote identity checks
 - **Evaluation Tools**: Metrics computation and static video analysis
@@ -120,3 +120,4 @@ MIT License - see [LICENSE](LICENSE) file for details
 ## Author
 
 David Drtil
+@ Brno University of Technology
