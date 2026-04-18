@@ -81,7 +81,7 @@ class DecisionLogic:
             signals['action'] = (weighted_action, 2.5)
         signals['spatial_peak'] = (spatial_evidence, 2.5)
         signals['spatial_avg'] = (min(1.0, spatial_avg * 5), 1.0)
-        signals['temporal_peak'] = (temporal_evidence, 3.0)
+        signals['temporal_peak'] = (temporal_evidence, 2.0)
         signals['temporal_consistency'] = (temporal_fake_ratio, 0.5)
         signals['identity_penalty'] = (identity_penalty, 1.5)
 
