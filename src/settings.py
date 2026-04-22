@@ -42,6 +42,8 @@ def initialize_config(args):
     output_video_path = output_dir / PathHelper.get_output_video_name(args.live, args.input_video)
     output_stats_path = output_dir / args.stats_filename
 
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     config = PipelineConfig(
         input_video_path=args.input_video,
         output_root_dir=str(output_dir),
@@ -66,6 +68,8 @@ def set_output_dir(output_dir, deepfake_label):
     output_dir_path = Path(output_dir)
     output_video_path = output_dir_path / PathHelper.get_output_video_name(config.is_live, config.input_video_path)
     output_stats_path = output_dir_path / config.stats_filename
+
+    output_dir_path.mkdir(parents=True, exist_ok=True)
 
     config = replace(
         config,
