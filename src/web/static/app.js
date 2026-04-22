@@ -224,7 +224,7 @@ function drawOverlay() {
 
     const faceDetected = lastServerData ? lastServerData.face_detected : false;
     drawAlignmentCircle(faceDetected);
-    drawDeepfakeScore();
+    //drawDeepfakeScore();      // Uncomment to show deepfake score on overlay during verification
 }
 
 function getScoreColor(score) {

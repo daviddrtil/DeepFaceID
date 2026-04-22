@@ -149,7 +149,7 @@ class FeedbackOverlay:
         sim = identity_result.similarity
         score = identity_result.identity_score
         sim_color = (0, 255, 0) if sim >= 0.4 else (0, 165, 255) if sim >= 0.25 else (0, 0, 255)
-        current_y = self._draw_text_line(frame, f"Identity: {sim * 100:.0f} % (score {score * 100:.0f} %)", sim_color, current_y)
+        current_y = self._draw_text_line(frame, f"Identity Similarity: {score * 100:.0f} %", sim_color, current_y)
         return current_y
 
     def _get_action_progress(self, overlay):

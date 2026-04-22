@@ -13,10 +13,11 @@ class FaceAligner:
         self.keypoint_indices = keypoint_indices
         self.dst_pts = self._get_aligned_reference_points(self.output_size)
 
+        self._debug_face_index = 0
         base_output_dir = Path(settings.config.output_dir)
         self._debug_output_dir = base_output_dir / "preprocessed_faces"
-        self._debug_output_dir.mkdir(parents=True, exist_ok=True)
-        self._debug_face_index = 0
+        # if settings.config.debug_mode:
+        #     self._debug_output_dir.mkdir(parents=True, exist_ok=True)
 
     def _save_debug_aligned_face(self, aligned_face):
         if not settings.config.debug_mode or aligned_face is None:
@@ -92,7 +93,8 @@ class FaceAligner:
             dtype=np.float32,
         )
         aligned_face = self._align(frame_rgb, src_pts)
-        self._save_debug_aligned_face(aligned_face)
+        # if settings.config.debug_mode:
+        #     self._save_debug_aligned_face(aligned_face)
         return aligned_face
 
     def preprocess_face(self, face_image):

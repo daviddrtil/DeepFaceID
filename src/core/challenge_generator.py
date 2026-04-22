@@ -10,7 +10,8 @@ class ChallengeGenerator:
         list2 = [HoldStillAction(), PoseAction.LEAN_HEAD_LEFT, ExpressionAction.OPEN_MOUTH, PoseAction.MOVE_HEAD_RIGHT, PoseAction.MOVE_HEAD_LEFT, ComplexAction({OcclusionAction.COVER_MOUTH, PoseAction.MOVE_HEAD_DOWN}), OcclusionAction.COVER_RIGHT_EYE]
         list3 = [HoldStillAction(), OcclusionAction.COVER_MOUTH, ExpressionAction.SMILE, PoseAction.MOVE_HEAD_DOWN, PoseAction.MOVE_HEAD_UP, PoseAction.MOVE_HEAD_DOWN, ComplexAction({OcclusionAction.COVER_MOUTH, OcclusionAction.COVER_RIGHT_EYE})]
         list4 = [HoldStillAction(), ExpressionAction.SMILE, PoseAction.MOVE_HEAD_RIGHT, PoseAction.MOVE_HEAD_LEFT, PoseAction.MOVE_HEAD_UP, PoseAction.MOVE_HEAD_DOWN, OcclusionAction.COVER_NOSE, OcclusionAction.COVER_LEFT_EYE, OcclusionAction.COVER_MOUTH, ComplexAction({OcclusionAction.COVER_MOUTH, PoseAction.MOVE_HEAD_RIGHT}), ComplexAction({OcclusionAction.COVER_MOUTH, OcclusionAction.COVER_RIGHT_EYE}), ComplexAction({OcclusionAction.COVER_MOUTH, OcclusionAction.COVER_RIGHT_EYE, PoseAction.MOVE_HEAD_LEFT})]
-        # self.actions: list[ChallengeType] = list4
+        list5 = [OcclusionAction.COVER_LEFT_EYE, PoseAction.MOVE_HEAD_LEFT, PoseAction.MOVE_HEAD_UP, PoseAction.MOVE_HEAD_DOWN, OcclusionAction.COVER_NOSE, OcclusionAction.COVER_LEFT_EYE, OcclusionAction.COVER_MOUTH, ComplexAction({OcclusionAction.COVER_MOUTH, PoseAction.MOVE_HEAD_RIGHT}), ComplexAction({OcclusionAction.COVER_MOUTH, OcclusionAction.COVER_RIGHT_EYE}), ComplexAction({OcclusionAction.COVER_MOUTH, OcclusionAction.COVER_RIGHT_EYE, PoseAction.MOVE_HEAD_LEFT})]
+        # self.actions: list[ChallengeType] = list5
         self.actions: list[ChallengeType] = self._generate_actions(actions_count)
         self.current_index = 0
         # for _ in range(10):
