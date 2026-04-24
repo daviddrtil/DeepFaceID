@@ -18,7 +18,7 @@ _ACTION_CATEGORIES = (
     {a.value: 'pose' for a in PoseAction} |
     {a.value: 'occlusion' for a in OcclusionAction} |
     {a.value: 'expression' for a in ExpressionAction} |
-    {HoldStillAction.value: 'calibration'}
+    {HoldStillAction().value: 'calibration'}
 )
 CATEGORY_ORDER = ['calibration', 'pose', 'occlusion', 'expression', 'complex', 'sequence']
 CATEGORY_LABELS = {
@@ -119,7 +119,11 @@ def load_results(outputs_dir):
         if analysis:
             analysis['session_name'] = session['session_name']
             analysis['timestamp'] = session['timestamp']
-            analysis['final_decision'] = summary.get('final_decision', 'unknown')
+            final_decision = summary.get('final_decision', 'unknown')
+            analysis['final_decision'] = final_decision
+            if final_decision in ('pass', 'fail'):
+                analysis['predicts_real'] = (final_decision == 'pass')
+                analysis['correct'] = analysis['predicts_real'] == (label == 'real')
             results.append(analysis)
     return results
 

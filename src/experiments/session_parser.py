@@ -30,18 +30,18 @@ def parse_stats_line(line):
         return {}
 
     result = {}
-    for key, val in _KV_RE.findall('|'.join(sections[:3])):
+    for key, val in _KV_RE.findall('|'.join(sections[:4])):
         result[key] = _parse_val(val)
 
     for field in ('face', 'hand', 'overlap'):
         if field in result:
             result[field] = result[field] == 1
 
-    m = _CHALLENGE_RE.search(sections[3])
+    m = _CHALLENGE_RE.search(sections[4])
     if m:
         result['challenge_index'] = int(m.group(1))
         result['challenge_total'] = int(m.group(2))
-    for key, val in _QUOTED_RE.findall(sections[3]):
+    for key, val in _QUOTED_RE.findall(sections[4]):
         result[key] = None if val == 'None' else val
 
     return result
