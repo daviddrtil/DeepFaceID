@@ -2,43 +2,44 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import pandas as pd
+import seaborn as sns
+
+sns.set_theme(style='whitegrid', palette='muted')
+
+_BOTH_COLORS = {'real': '#2ecc71', 'fake': '#e74c3c'}
 
 
 def _save(fig, path):
-    plt.tight_layout()
+    fig.tight_layout()
     fig.savefig(path, dpi=150)
     plt.close(fig)
     print(f"  Saved: {path.name}")
 
 
-def _class_color(m):
-    return 'steelblue' if m['real_count'] > 0 and m['fake_count'] > 0 else 'lightsteelblue'
-
-
 def confusion_matrix(metrics, path):
+    counts = pd.DataFrame(
+        [[metrics['tp'], metrics['fn']], [metrics['fp'], metrics['tn']]],
+        index=['Actual Real', 'Actual Fake'],
+        columns=['Pred Real', 'Pred Fake'],
+    )
+    # Normalize by row so colors reflect per-class recall (0–1), annotations show counts
+    norm = counts.div(counts.sum(axis=1).replace(0, 1), axis=0)
     fig, ax = plt.subplots(figsize=(6, 5))
-    cm = [[metrics['tp'], metrics['fn']], [metrics['fp'], metrics['tn']]]
-    ax.imshow(cm, cmap='Blues')
-    ax.set_xticks([0, 1])
-    ax.set_yticks([0, 1])
-    ax.set_xticklabels(['Predicted Real', 'Predicted Fake'])
-    ax.set_yticklabels(['Actual Real', 'Actual Fake'])
-    for i in range(2):
-        for j in range(2):
-            ax.text(j, i, cm[i][j], ha='center', va='center', fontsize=20, fontweight='bold')
+    sns.heatmap(norm, annot=counts, fmt='d', cmap='Blues',
+                vmin=0, vmax=1, linewidths=0.5, ax=ax)
     ax.set_title('Confusion Matrix')
-    plt.colorbar(ax.images[0])
     _save(fig, path)
 
 
 def metrics_summary(metrics, roc_auc, eer, path):
-    fig, ax = plt.subplots(figsize=(10, 5))
     names = ['Accuracy', 'Precision', 'Recall', 'F1 Score']
     values = [metrics[k] * 100 for k in ('accuracy', 'precision', 'recall', 'f1')]
     if roc_auc is not None:
         names.append('AUC')
         values.append(roc_auc * 100)
-    colors = ['steelblue', 'green', 'orange', 'purple', 'teal'][:len(names)]
+    fig, ax = plt.subplots(figsize=(10, 5))
+    colors = sns.color_palette('muted', len(names))
     bars = ax.bar(names, values, color=colors)
     for bar, val in zip(bars, values):
         ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1,
@@ -54,15 +55,13 @@ def metrics_summary(metrics, roc_auc, eer, path):
 
 
 def score_distribution(results, threshold, path):
-    real = [r['final_passive_avg'] for r in results if r['ground_truth'] == 'real']
-    fake = [r['final_passive_avg'] for r in results if r['ground_truth'] == 'fake']
-    if not real and not fake:
+    rows = [{'score': r['final_passive_avg'], 'class': r['ground_truth']} for r in results]
+    if not rows:
         return
+    df = pd.DataFrame(rows)
     fig, ax = plt.subplots(figsize=(8, 5))
-    if real:
-        ax.hist(real, bins=20, alpha=0.6, label=f'Real (n={len(real)})', color='green')
-    if fake:
-        ax.hist(fake, bins=20, alpha=0.6, label=f'Fake (n={len(fake)})', color='red')
+    sns.histplot(data=df, x='score', hue='class', kde=True, bins=20,
+                 palette=_BOTH_COLORS, alpha=0.6, ax=ax)
     ax.axvline(x=threshold, color='black', linestyle='--', linewidth=2,
                label=f'Threshold ({threshold})')
     ax.set_xlabel('Passive Score (lower = more likely real)')
@@ -85,33 +84,34 @@ def roc_curve(fpr, tpr, auc, path):
     ax.set_xlim(-0.02, 1.02)
     ax.set_ylim(-0.02, 1.02)
     ax.set_aspect('equal')
-    ax.grid(True, alpha=0.3)
     _save(fig, path)
 
 
-def analyzer_comparison(analyzer_metrics, analyzers, threshold, path):
-    present = [a for a in analyzers if a in analyzer_metrics]
-    if not present:
+def _boxstrip(df, y_col, y_order, ax):
+    """Boxplot (outline only) + individual points — works well even with few samples."""
+    common = dict(data=df, y=y_col, x='Score', hue='Class',
+                  palette=_BOTH_COLORS, order=y_order, orient='h', ax=ax)
+    sns.boxplot(**common, fill=False, linewidth=1.2, fliersize=0, width=0.5, gap=0.1)
+    sns.stripplot(**common, dodge=True, jitter=0.15, alpha=0.85, size=7, legend=False)
+
+
+def analyzer_comparison(analyzer_metrics, analyzers, path):
+    rows = []
+    for a in analyzers:
+        if a not in analyzer_metrics:
+            continue
+        m = analyzer_metrics[a]
+        for score in m.get('real_scores', []):
+            rows.append({'Analyzer': a.capitalize(), 'Class': 'real', 'Score': score})
+        for score in m.get('fake_scores', []):
+            rows.append({'Analyzer': a.capitalize(), 'Class': 'fake', 'Score': score})
+    if not rows:
         return
+    df = pd.DataFrame(rows)
     fig, ax = plt.subplots(figsize=(10, 5))
-    x = range(len(present))
-    w = 0.35
-    for offset, key, color, label in [(-w/2, 'real_stats', 'green', 'Real'),
-                                       (w/2, 'fake_stats', 'red', 'Fake')]:
-        means = [analyzer_metrics[a][key]['mean'] or 0 for a in present]
-        stds = [analyzer_metrics[a][key]['std'] or 0 for a in present]
-        bars = ax.bar([i + offset for i in x], means, w, yerr=stds,
-                      color=color, alpha=0.7, label=label, capsize=4)
-        for bar, val in zip(bars, means):
-            if val > 0:
-                ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.01,
-                        f'{val:.3f}', ha='center', fontsize=9)
-    ax.set_xticks(list(x))
-    ax.set_xticklabels([a.capitalize() for a in present])
-    ax.set_ylabel('Mean Score')
+    _boxstrip(df, 'Analyzer', sorted(df['Analyzer'].unique()), ax)
+    ax.set_xlabel('Score')
     ax.set_title('Per-Analyzer Score Comparison (Real vs Fake)')
-    ax.axhline(y=threshold, color='black', linestyle='--', alpha=0.5, label='Threshold')
-    ax.legend()
     _save(fig, path)
 
 
@@ -119,16 +119,19 @@ def category_accuracy(category_metrics, category_order, category_labels, path):
     cats = [c for c in category_order if c in category_metrics]
     if not cats:
         return
+    rows = [{
+        'category': category_labels.get(c, c),
+        'accuracy': category_metrics[c]['accuracy'] * 100,
+        'total': category_metrics[c]['total'],
+        'both': category_metrics[c]['real_count'] > 0 and category_metrics[c]['fake_count'] > 0,
+    } for c in reversed(cats)]
+    df = pd.DataFrame(rows)
     fig, ax = plt.subplots(figsize=(10, max(5, len(cats) * 1.2)))
-    labels = [category_labels.get(c, c) for c in cats]
-    accs = [category_metrics[c]['accuracy'] * 100 for c in cats]
-    totals = [category_metrics[c]['total'] for c in cats]
-    colors = [_class_color(category_metrics[c]) for c in cats]
-
-    bars = ax.barh(labels, accs, color=colors)
-    for bar, acc, n in zip(bars, accs, totals):
+    colors = ['steelblue' if b else 'lightsteelblue' for b in df['both']]
+    bars = ax.barh(df['category'], df['accuracy'], color=colors)
+    for bar, (_, row) in zip(bars, df.iterrows()):
         ax.text(bar.get_width() + 1, bar.get_y() + bar.get_height() / 2,
-                f'{acc:.0f}% (n={n})', va='center', fontsize=10)
+                f'{row["accuracy"]:.0f}% (n={row["total"]})', va='center', fontsize=10)
     ax.set_xlabel('Accuracy (%)')
     ax.set_title('Detection Accuracy by Action Category')
     ax.set_xlim(0, 120)
@@ -137,7 +140,6 @@ def category_accuracy(category_metrics, category_order, category_labels, path):
         mpatches.Patch(color='steelblue', label='Both real & fake'),
         mpatches.Patch(color='lightsteelblue', label='Single-class only'),
     ], loc='lower right')
-    ax.invert_yaxis()
     _save(fig, path)
 
 
@@ -145,15 +147,20 @@ def accuracy_by_action(action_metrics, path):
     if not action_metrics:
         return
     items = sorted(action_metrics.items(), key=lambda x: (-x[1]['accuracy'], x[0]))
-    actions = [a for a, _ in items]
-    accs = [m['accuracy'] * 100 for _, m in items]
-    colors = [_class_color(m) for _, m in items]
-
-    fig, ax = plt.subplots(figsize=(10, max(6, len(actions) * 0.4)))
-    bars = ax.barh(actions, accs, color=colors)
-    for bar, (_, m) in zip(bars, items):
+    rows = [{
+        'action': a,
+        'accuracy': m['accuracy'] * 100,
+        'both': m['real_count'] > 0 and m['fake_count'] > 0,
+        'real_count': m['real_count'],
+        'fake_count': m['fake_count'],
+    } for a, m in reversed(items)]
+    df = pd.DataFrame(rows)
+    fig, ax = plt.subplots(figsize=(10, max(6, len(items) * 0.4)))
+    colors = ['steelblue' if b else 'lightsteelblue' for b in df['both']]
+    bars = ax.barh(df['action'], df['accuracy'], color=colors)
+    for bar, (_, row) in zip(bars, df.iterrows()):
         ax.text(bar.get_width() + 1, bar.get_y() + bar.get_height() / 2,
-                f'{m["accuracy"]*100:.0f}% (r={m["real_count"]}, f={m["fake_count"]})',
+                f'{row["accuracy"]:.0f}% (r={row["real_count"]}, f={row["fake_count"]})',
                 va='center', fontsize=9)
     ax.set_xlabel('Accuracy (%)')
     ax.set_title('Detection Accuracy by Challenge Action')
@@ -163,33 +170,23 @@ def accuracy_by_action(action_metrics, path):
         mpatches.Patch(color='steelblue', label='Both real & fake'),
         mpatches.Patch(color='lightsteelblue', label='Single-class only'),
     ], loc='lower right')
-    ax.invert_yaxis()
     _save(fig, path)
 
 
-def scores_by_action(action_metrics, threshold, path):
-    if not action_metrics:
+def scores_by_action(action_metrics, path):
+    rows = []
+    for action, m in action_metrics.items():
+        for score in m.get('real_scores', []):
+            rows.append({'action': action, 'Class': 'real', 'Score': score})
+        for score in m.get('fake_scores', []):
+            rows.append({'action': action, 'Class': 'fake', 'Score': score})
+    if not rows:
         return
-    actions = sorted(action_metrics.keys())
-    fig, ax = plt.subplots(figsize=(10, max(6, len(actions) * 0.5)))
-    h = 0.35
-    for i, action in enumerate(actions):
-        m = action_metrics[action]
-        for offset, stats_key, count_key, color in [(-h/2, 'real_stats', 'real_count', 'green'),
-                                                      (h/2, 'fake_stats', 'fake_count', 'red')]:
-            s = m[stats_key]
-            if s['mean'] is not None:
-                ax.barh(i + offset, s['mean'], h, xerr=s['std'], color=color, alpha=0.7, capsize=3)
-                ax.text(s['mean'] + (s['std'] or 0) + 0.01, i + offset,
-                        f'{s["mean"]:.3f} (n={m[count_key]})', va='center', fontsize=8)
-    ax.set_yticks(range(len(actions)))
-    ax.set_yticklabels(actions)
+    df = pd.DataFrame(rows)
+    action_order = sorted(df['action'].unique())
+    fig, ax = plt.subplots(figsize=(10, max(6, len(action_order) * 0.7)))
+    _boxstrip(df, 'action', action_order, ax)
     ax.set_xlabel('Average Passive Score')
-    ax.set_title('Scores by Action (Real vs Fake, mean ± std)')
-    ax.axvline(x=threshold, color='black', linestyle='--', alpha=0.5)
-    ax.legend(handles=[
-        mpatches.Patch(color='green', alpha=0.7, label='Real'),
-        mpatches.Patch(color='red', alpha=0.7, label='Fake'),
-    ])
-    ax.invert_yaxis()
+    ax.set_title('Scores by Action (Real vs Fake)')
     _save(fig, path)
+

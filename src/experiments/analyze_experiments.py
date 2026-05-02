@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from collections import defaultdict
+from scipy import stats as scipy_stats
 
 _src_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_src_dir))
@@ -65,6 +66,13 @@ def _class_accuracy(real_scores, fake_scores):
     fake_ok = sum(1 for s in fake_scores if s > THRESHOLD)
     total = len(real_scores) + len(fake_scores)
     return (real_ok + fake_ok) / total if total else 0
+
+
+def compute_significance(real_scores, fake_scores):
+    if len(real_scores) < 3 or len(fake_scores) < 3:
+        return None
+    stat, p = scipy_stats.mannwhitneyu(real_scores, fake_scores, alternative='two-sided')
+    return {'statistic': float(stat), 'p_value': float(p), 'significant': p < 0.05}
 
 
 def _analyze_session(frames, ground_truth):
@@ -150,9 +158,12 @@ def _group_metrics(results, frames_field):
             'accuracy': _class_accuracy(d['real'], d['fake']),
             'total': len(d['real']) + len(d['fake']),
             'real_count': len(d['real']), 'fake_count': len(d['fake']),
+            'real_scores': d['real'],
+            'fake_scores': d['fake'],
             'real_stats': _score_stats(d['real']),
             'fake_stats': _score_stats(d['fake']),
             'category': d['category'],
+            'significance': compute_significance(d['real'], d['fake']),
         }
         for name, d in groups.items()
     }
@@ -207,8 +218,11 @@ def calculate_analyzer_metrics(results):
         a: {
             'accuracy': _class_accuracy(d['real'], d['fake']),
             'total': len(d['real']) + len(d['fake']),
+            'real_scores': d['real'],
+            'fake_scores': d['fake'],
             'real_stats': _score_stats(d['real']),
             'fake_stats': _score_stats(d['fake']),
+            'significance': compute_significance(d['real'], d['fake']),
         }
         for a, d in groups.items()
     }
@@ -237,7 +251,14 @@ def compute_eer(results):
     thresholds = np.unique(np.concatenate([real, fake]))
     frr = np.array([(real > t).mean() for t in thresholds])
     far = np.array([(fake <= t).mean() for t in thresholds])
-    idx = np.argmin(np.abs(far - frr))
+    diff = far - frr
+    idx = np.argmin(np.abs(diff))
+    # Interpolate for better precision at the crossover point
+    if idx > 0 and diff[idx - 1] * diff[idx] < 0:
+        t_eer = np.interp(0, [diff[idx - 1], diff[idx]], [thresholds[idx - 1], thresholds[idx]])
+        frr_eer = np.interp(t_eer, thresholds, frr)
+        far_eer = np.interp(t_eer, thresholds, far)
+        return float((far_eer + frr_eer) / 2)
     return float((far[idx] + frr[idx]) / 2)
 
 
@@ -276,12 +297,17 @@ def print_report(metrics, action_metrics, category_metrics, analyzer_metrics, re
 
     if analyzer_metrics:
         print(f"\n--- Analyzers ---")
-        print(f"  {'ANALYZER':<12s} {'ACC':>6s}  {'Real':>20s}  {'Fake':>20s}")
-        print("  " + "-" * 64)
+        print(f"  {'ANALYZER':<12s} {'ACC':>6s}  {'Real':>20s}  {'Fake':>20s}  {'p-value':>10s}")
+        print("  " + "-" * 78)
         for a in ANALYZERS:
             if a in analyzer_metrics:
                 m = analyzer_metrics[a]
-                print(f"  {a:<12s} {m['accuracy']:5.1%}  {_fmt(m['real_stats']):>20s}  {_fmt(m['fake_stats']):>20s}")
+                sig = m.get('significance')
+                if sig:
+                    p_str = f"{sig['p_value']:.4f}{'*' if sig['significant'] else ' '}"
+                else:
+                    p_str = "    n/a"
+                print(f"  {a:<12s} {m['accuracy']:5.1%}  {_fmt(m['real_stats']):>20s}  {_fmt(m['fake_stats']):>20s}  {p_str:>10s}")
 
     if category_metrics:
         print(f"\n--- Categories ---")
@@ -301,7 +327,9 @@ def print_report(metrics, action_metrics, category_metrics, analyzer_metrics, re
             cat = m.get('category', '?')[:10]
             rs = f"{m['real_stats']['mean']:.3f}" if m['real_stats']['mean'] is not None else "  -  "
             fs = f"{m['fake_stats']['mean']:.3f}" if m['fake_stats']['mean'] is not None else "  -  "
-            print(f"  {action:<40s} {cat:>10s} {m['accuracy']:5.1%} {m['total']:3d}  {rs:>6s}  {fs:>6s}")
+            sig = m.get('significance')
+            p_str = f"{sig['p_value']:.4f}{'*' if sig['significant'] else ' '}" if sig else "  n/a"
+            print(f"  {action:<40s} {cat:>10s} {m['accuracy']:5.1%} {m['total']:3d}  {rs:>6s}  {fs:>6s}  {p_str}")
 
     print(f"\n--- Recent Sessions ---")
     for r in results[-10:]:
@@ -352,6 +380,8 @@ def export_action_csv(action_metrics, path):
             'real_std':    rs.get('std'),
             'fake_mean':   fs.get('mean'),
             'fake_std':    fs.get('std'),
+            'p_value':     m['significance']['p_value'] if m.get('significance') else None,
+            'significant': m['significance']['significant'] if m.get('significance') else None,
         })
     pd.DataFrame(rows).to_csv(path, index=False, float_format='%.4f')
     print(f"Exported {len(action_metrics)} actions to {path}")
@@ -364,10 +394,10 @@ def generate_graphs(results, metrics, action_metrics, category_metrics, analyzer
     draw_graphs.confusion_matrix(metrics, output_dir / "confusion_matrix.png")
     draw_graphs.score_distribution(results, THRESHOLD, output_dir / "score_distribution.png")
     draw_graphs.roc_curve(fpr, tpr, roc_auc, output_dir / "roc_curve.png")
-    draw_graphs.analyzer_comparison(analyzer_metrics, ANALYZERS, THRESHOLD, output_dir / "analyzer_comparison.png")
+    draw_graphs.analyzer_comparison(analyzer_metrics, ANALYZERS, output_dir / "analyzer_comparison.png")
     draw_graphs.category_accuracy(category_metrics, CATEGORY_ORDER, CATEGORY_LABELS, output_dir / "category_accuracy.png")
     draw_graphs.accuracy_by_action(action_metrics, output_dir / "accuracy_by_action.png")
-    draw_graphs.scores_by_action(action_metrics, THRESHOLD, output_dir / "scores_by_action.png")
+    draw_graphs.scores_by_action(action_metrics, output_dir / "scores_by_action.png")
 
 
 if __name__ == '__main__':
