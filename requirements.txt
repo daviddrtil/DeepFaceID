@@ -11,4 +11,5 @@ flask
 scikit-image
 aiohttp
 matplotlib
+pandas
 insightface

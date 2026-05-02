@@ -1,5 +1,6 @@
 import sys
-import math
+import numpy as np
+import pandas as pd
 from pathlib import Path
 from collections import defaultdict
 
@@ -7,19 +8,12 @@ _src_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_src_dir))
 
 from core.decision_logic import DecisionLogic, PASSIVE_WEIGHTS
-from interactive.action_enum import PoseAction, OcclusionAction, ExpressionAction, HoldStillAction
 import session_parser
 import draw_graphs
 
 
+ANALYZERS = ('spatial', 'frequency', 'temporal')
 THRESHOLD = DecisionLogic.DEEPFAKE_SCORE_THRESHOLD
-
-_ACTION_CATEGORIES = (
-    {a.value: 'pose' for a in PoseAction} |
-    {a.value: 'occlusion' for a in OcclusionAction} |
-    {a.value: 'expression' for a in ExpressionAction} |
-    {HoldStillAction().value: 'calibration'}
-)
 CATEGORY_ORDER = ['calibration', 'pose', 'occlusion', 'expression', 'complex', 'sequence']
 CATEGORY_LABELS = {
     'calibration': 'Hold Still (calibration)',
@@ -30,25 +24,12 @@ CATEGORY_LABELS = {
     'sequence': 'Sequence (sequential)',
 }
 
-def _infer_category(action_name):
-    if not action_name:
-        return None
-    if action_name in _ACTION_CATEGORIES:
-        return _ACTION_CATEGORIES[action_name]
-    if ' + ' in action_name:
-        return 'complex'
-    if ' -> ' in action_name:
-        return 'sequence'
-    return 'unknown'
-
 
 def _score_stats(values):
     if not values:
         return {'mean': None, 'std': None, 'min': None, 'max': None, 'n': 0}
-    n = len(values)
-    mean = sum(values) / n
-    std = math.sqrt(sum((x - mean) ** 2 for x in values) / (n - 1)) if n > 1 else 0.0
-    return {'mean': mean, 'std': std, 'min': min(values), 'max': max(values), 'n': n}
+    s = pd.Series(values)
+    return {'mean': s.mean(), 'std': s.std(), 'min': s.min(), 'max': s.max(), 'n': len(s)}
 
 
 def _action_aware_score(frame, frame_action_map):
@@ -103,9 +84,11 @@ def _analyze_session(frames, ground_truth):
     for f in frames:
         if f.get('spatial') is None:
             continue    # Skip frames where no detector has result
-        if action := f.get('action'):
+        action = f.get('action')
+        if isinstance(action, str) and action:
             action_frames[action].append(f)
-        if cat := f.get('action_category'):
+        cat = f.get('action_category')
+        if isinstance(cat, str) and cat:
             category_frames[cat].append(f)
 
     face_frames = [f for f in frames if 'face' in f]
@@ -123,7 +106,7 @@ def _analyze_session(frames, ground_truth):
         'face_detection_rate': face_rate,
         'analyzer_stats': {
             a: _score_stats([f[a] for f in frames if f.get(a) is not None])
-            for a in session_parser.ANALYZERS
+            for a in ANALYZERS
         },
     }
 
@@ -133,19 +116,14 @@ def load_results(outputs_dir):
     for session in session_parser.find_sessions(outputs_dir):
         frames, summary = session_parser.load_session(session['stats_file'])
         label = summary.get('label')
-        if label in (None, 'unknown'):
-            label = session['label']
         if label not in ('real', 'fake'):
             continue
-        # Tag action categories from enum data (session_parser)
-        for f in frames:
-            if 'action_category' not in f:
-                f['action_category'] = _infer_category(f.get('action'))
+        final_decision = summary.get('final_decision')
+        if final_decision not in ('pass', 'fail'):
+            continue    # skip timeout or imcomplete sessions
         analysis = _analyze_session(frames, label)
         if analysis:
             analysis['session_name'] = session['session_name']
-            analysis['timestamp'] = session['timestamp']
-            final_decision = summary.get('final_decision', 'unknown')
             analysis['final_decision'] = final_decision
             if final_decision in ('pass', 'fail'):
                 analysis['predicts_real'] = (final_decision == 'pass')
@@ -155,15 +133,18 @@ def load_results(outputs_dir):
 
 
 def _group_metrics(results, frames_field):
-    groups = defaultdict(lambda: {'real': [], 'fake': []})
+    groups = defaultdict(lambda: {'real': [], 'fake': [], 'category': None})
     for r in results:
         key = 'real' if r['ground_truth'] == 'real' else 'fake'
         frame_action_map = r.get('frame_action_map', {})
         for name, frames in r[frames_field].items():
+            g = groups[name]
+            if g['category'] is None and frames:
+                g['category'] = frames[0].get('action_category')
             scores = [_action_aware_score(f, frame_action_map) for f in frames]
             scores = [s for s in scores if s is not None]
             if scores:
-                groups[name][key].append(sum(scores) / len(scores))
+                g[key].append(sum(scores) / len(scores))
     return {
         name: {
             'accuracy': _class_accuracy(d['real'], d['fake']),
@@ -171,6 +152,7 @@ def _group_metrics(results, frames_field):
             'real_count': len(d['real']), 'fake_count': len(d['fake']),
             'real_stats': _score_stats(d['real']),
             'fake_stats': _score_stats(d['fake']),
+            'category': d['category'],
         }
         for name, d in groups.items()
     }
@@ -206,10 +188,7 @@ def calculate_metrics(results):
 
 
 def calculate_action_metrics(results):
-    metrics = _group_metrics(results, 'action_frames')
-    for action, data in metrics.items():
-        data['category'] = _infer_category(action)
-    return metrics
+    return _group_metrics(results, 'action_frames')
 
 
 def calculate_category_metrics(results):
@@ -220,7 +199,7 @@ def calculate_analyzer_metrics(results):
     groups = defaultdict(lambda: {'real': [], 'fake': []})
     for r in results:
         key = 'real' if r['ground_truth'] == 'real' else 'fake'
-        for a in session_parser.ANALYZERS:
+        for a in ANALYZERS:
             s = r['analyzer_stats'].get(a, {})
             if s.get('mean') is not None:
                 groups[a][key].append(s['mean'])
@@ -236,43 +215,30 @@ def calculate_analyzer_metrics(results):
 
 
 def compute_roc(results):
-    pairs = [(r['final_passive_avg'], r['ground_truth'] == 'fake') for r in results]
-    n_pos = sum(is_fake for _, is_fake in pairs)
-    n_neg = len(pairs) - n_pos
+    scores = np.array([r['final_passive_avg'] for r in results])
+    is_fake = np.array([r['ground_truth'] == 'fake' for r in results])
+    n_pos, n_neg = is_fake.sum(), (~is_fake).sum()
     if n_pos == 0 or n_neg == 0:
         return [], [], 0.0
-
-    pairs.sort(key=lambda x: -x[0])
-    fpr, tpr = [0.0], [0.0]
-    tp = fp = 0
-    prev = None
-    for score, is_fake in pairs:
-        if prev is not None and score != prev:
-            fpr.append(fp / n_neg)
-            tpr.append(tp / n_pos)
-        tp += is_fake
-        fp += not is_fake
-        prev = score
-    fpr.append(1.0)
-    tpr.append(1.0)
-
-    auc = sum((fpr[i] - fpr[i-1]) * (tpr[i] + tpr[i-1]) / 2 for i in range(1, len(fpr)))
-    return fpr, tpr, auc
+    order = np.argsort(-scores)
+    is_fake_s, scores_s = is_fake[order], scores[order]
+    tp = np.concatenate([[0], np.cumsum(is_fake_s)])
+    fp = np.concatenate([[0], np.cumsum(~is_fake_s)])
+    keep = np.concatenate([[True], scores_s[:-1] != scores_s[1:], [True]])
+    tpr, fpr = tp[keep] / n_pos, fp[keep] / n_neg
+    return fpr.tolist(), tpr.tolist(), float(np.trapz(tpr, fpr))
 
 
 def compute_eer(results):
-    real_scores = sorted(r['final_passive_avg'] for r in results if r['ground_truth'] == 'real')
-    fake_scores = sorted(r['final_passive_avg'] for r in results if r['ground_truth'] == 'fake')
-    if not real_scores or not fake_scores:
+    real = np.array([r['final_passive_avg'] for r in results if r['ground_truth'] == 'real'])
+    fake = np.array([r['final_passive_avg'] for r in results if r['ground_truth'] == 'fake'])
+    if not len(real) or not len(fake):
         return None
-    best_diff, eer = float('inf'), None
-    for t in sorted(set(real_scores + fake_scores)):
-        frr = sum(1 for s in real_scores if s > t) / len(real_scores)
-        far = sum(1 for s in fake_scores if s <= t) / len(fake_scores)
-        diff = abs(far - frr)
-        if diff < best_diff:
-            best_diff, eer = diff, (far + frr) / 2
-    return eer
+    thresholds = np.unique(np.concatenate([real, fake]))
+    frr = np.array([(real > t).mean() for t in thresholds])
+    far = np.array([(fake <= t).mean() for t in thresholds])
+    idx = np.argmin(np.abs(far - frr))
+    return float((far[idx] + frr[idx]) / 2)
 
 
 def print_report(metrics, action_metrics, category_metrics, analyzer_metrics, results, roc_auc, eer):
@@ -312,7 +278,7 @@ def print_report(metrics, action_metrics, category_metrics, analyzer_metrics, re
         print(f"\n--- Analyzers ---")
         print(f"  {'ANALYZER':<12s} {'ACC':>6s}  {'Real':>20s}  {'Fake':>20s}")
         print("  " + "-" * 64)
-        for a in session_parser.ANALYZERS:
+        for a in ANALYZERS:
             if a in analyzer_metrics:
                 m = analyzer_metrics[a]
                 print(f"  {a:<12s} {m['accuracy']:5.1%}  {_fmt(m['real_stats']):>20s}  {_fmt(m['fake_stats']):>20s}")
@@ -348,47 +314,46 @@ def print_report(metrics, action_metrics, category_metrics, analyzer_metrics, re
 
 def export_csv(results, path):
     path.parent.mkdir(parents=True, exist_ok=True)
-    cols = [
-        'session', 'timestamp', 'ground_truth', 'predicted', 'correct',
-        'final_passive_avg', 'total_frames', 'face_detection_rate',
-        'spatial_mean', 'spatial_std', 'frequency_mean', 'frequency_std',
-        'temporal_mean', 'temporal_std', 'final_decision',
-    ]
-    with open(path, 'w', encoding='utf-8') as f:
-        f.write(','.join(cols) + '\n')
-        for r in results:
-            a = r.get('analyzer_stats', {})
-            row = [
-                r.get('session_name', ''), r.get('timestamp', ''),
-                r['ground_truth'], 'real' if r['predicts_real'] else 'fake',
-                'yes' if r['correct'] else 'no',
-                f"{r['final_passive_avg']:.4f}", str(r['total_frames']),
-                f"{r['face_detection_rate']:.4f}",
-            ]
-            for analyzer in session_parser.ANALYZERS:
-                s = a.get(analyzer, {})
-                row.append(f"{s['mean']:.4f}" if s.get('mean') is not None else '')
-                row.append(f"{s['std']:.4f}" if s.get('std') is not None else '')
-            row.append(r.get('final_decision', ''))
-            f.write(','.join(row) + '\n')
+    rows = []
+    for r in results:
+        a = r.get('analyzer_stats', {})
+        row = {
+            'session':             r.get('session_name', ''),
+            'ground_truth':        r['ground_truth'],
+            'predicted':           'real' if r['predicts_real'] else 'fake',
+            'correct':             r['correct'],
+            'final_passive_avg':   r['final_passive_avg'],
+            'total_frames':        r['total_frames'],
+            'face_detection_rate': r['face_detection_rate'],
+        }
+        for analyzer in ANALYZERS:
+            s = a.get(analyzer, {})
+            row[f'{analyzer}_mean'] = s.get('mean')
+            row[f'{analyzer}_std']  = s.get('std')
+        row['final_decision'] = r.get('final_decision', '')
+        rows.append(row)
+    pd.DataFrame(rows).to_csv(path, index=False, float_format='%.4f')
     print(f"Exported {len(results)} sessions to {path}")
 
 
 def export_action_csv(action_metrics, path):
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, 'w', encoding='utf-8') as f:
-        f.write('action,category,accuracy,total,real_count,fake_count,real_mean,real_std,fake_mean,fake_std\n')
-        for action, m in sorted(action_metrics.items()):
-            rs, fs = m['real_stats'], m['fake_stats']
-            vals = [
-                action, m.get('category', ''), f"{m['accuracy']:.4f}", str(m['total']),
-                str(m['real_count']), str(m['fake_count']),
-                f"{rs['mean']:.4f}" if rs['mean'] is not None else '',
-                f"{rs['std']:.4f}" if rs['std'] is not None else '',
-                f"{fs['mean']:.4f}" if fs['mean'] is not None else '',
-                f"{fs['std']:.4f}" if fs['std'] is not None else '',
-            ]
-            f.write(','.join(vals) + '\n')
+    rows = []
+    for action, m in sorted(action_metrics.items()):
+        rs, fs = m['real_stats'], m['fake_stats']
+        rows.append({
+            'action':      action,
+            'category':    m.get('category', ''),
+            'accuracy':    m['accuracy'],
+            'total':       m['total'],
+            'real_count':  m['real_count'],
+            'fake_count':  m['fake_count'],
+            'real_mean':   rs.get('mean'),
+            'real_std':    rs.get('std'),
+            'fake_mean':   fs.get('mean'),
+            'fake_std':    fs.get('std'),
+        })
+    pd.DataFrame(rows).to_csv(path, index=False, float_format='%.4f')
     print(f"Exported {len(action_metrics)} actions to {path}")
 
 
@@ -399,7 +364,7 @@ def generate_graphs(results, metrics, action_metrics, category_metrics, analyzer
     draw_graphs.confusion_matrix(metrics, output_dir / "confusion_matrix.png")
     draw_graphs.score_distribution(results, THRESHOLD, output_dir / "score_distribution.png")
     draw_graphs.roc_curve(fpr, tpr, roc_auc, output_dir / "roc_curve.png")
-    draw_graphs.analyzer_comparison(analyzer_metrics, session_parser.ANALYZERS, THRESHOLD, output_dir / "analyzer_comparison.png")
+    draw_graphs.analyzer_comparison(analyzer_metrics, ANALYZERS, THRESHOLD, output_dir / "analyzer_comparison.png")
     draw_graphs.category_accuracy(category_metrics, CATEGORY_ORDER, CATEGORY_LABELS, output_dir / "category_accuracy.png")
     draw_graphs.accuracy_by_action(action_metrics, output_dir / "accuracy_by_action.png")
     draw_graphs.scores_by_action(action_metrics, THRESHOLD, output_dir / "scores_by_action.png")
@@ -421,7 +386,7 @@ if __name__ == '__main__':
     print_report(metrics, action_metrics, category_metrics, analyzer_metrics, results, roc_auc, eer)
 
     if results:
-        out = outputs_dir / "experiments"
+        out = Path(__file__).parent / "results"
         export_csv(results, out / "analysis_results.csv")
         export_action_csv(action_metrics, out / "action_results.csv")
         generate_graphs(results, metrics, action_metrics, category_metrics, analyzer_metrics, fpr, tpr, roc_auc, eer, out)

@@ -59,11 +59,8 @@ class ComplexAction:
 class HoldStillAction:
     # Used for detector calibration
     duration_seconds: float = 2.0
-    name: str = field(init=False, default="Hold Still")
-
-    @property
-    def value(self):
-        return self.name
+    name: str = field(init=False, default="HOLD_STILL")
+    value: str = field(init=False, default="Hold Still")
 
 ChallengeType: TypeAlias = ActionType | ComplexAction | HoldStillAction
 
@@ -100,7 +97,7 @@ ACTION_SEQUENCES = [
 def get_action_name(action):
     if action is None:
         return None
-    if isinstance(action, (ComplexAction, SequenceAction, HoldStillAction)):
+    if isinstance(action, (ComplexAction, SequenceAction)):
         return action.name
     return action.value
 

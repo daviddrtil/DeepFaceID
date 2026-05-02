@@ -12,9 +12,7 @@ class PipelineConfig:
     input_video_path: str
     output_root_dir: str
     output_dir: str
-    stats_filename: str
     output_video_path: str
-    output_stats_path: str
     is_live: bool
     save_output: bool
     frame_sampling: int
@@ -40,17 +38,13 @@ def initialize_config(args):
         output_dir = PathHelper.get_timestamped_path(args.output_root_dir)
 
     output_video_path = output_dir / PathHelper.get_output_video_name(args.live, args.input_video)
-    output_stats_path = output_dir / args.stats_filename
-
     output_dir.mkdir(parents=True, exist_ok=True)
 
     config = PipelineConfig(
         input_video_path=args.input_video,
         output_root_dir=str(output_dir),
         output_dir=str(output_dir),
-        stats_filename=args.stats_filename,
         output_video_path=str(output_video_path),
-        output_stats_path=str(output_stats_path),
         is_live=args.live,
         save_output=args.save_output,
         frame_sampling=args.frame_sampling,
@@ -67,15 +61,12 @@ def set_output_dir(output_dir, deepfake_label):
 
     output_dir_path = Path(output_dir)
     output_video_path = output_dir_path / PathHelper.get_output_video_name(config.is_live, config.input_video_path)
-    output_stats_path = output_dir_path / config.stats_filename
-
     output_dir_path.mkdir(parents=True, exist_ok=True)
 
     config = replace(
         config,
         output_dir=str(output_dir_path),
         output_video_path=str(output_video_path),
-        output_stats_path=str(output_stats_path),
         deepfake_label=deepfake_label
     )
 

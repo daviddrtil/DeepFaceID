@@ -3,9 +3,6 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
-_BOTH_PATCH = mpatches.Patch(color='steelblue', label='Both real & fake')
-_SINGLE_PATCH = mpatches.Patch(color='lightsteelblue', label='Single-class only')
-
 
 def _save(fig, path):
     plt.tight_layout()
@@ -136,7 +133,10 @@ def category_accuracy(category_metrics, category_order, category_labels, path):
     ax.set_title('Detection Accuracy by Action Category')
     ax.set_xlim(0, 120)
     ax.axvline(x=50, color='red', linestyle='--', alpha=0.5)
-    ax.legend(handles=[_BOTH_PATCH, _SINGLE_PATCH], loc='lower right')
+    ax.legend(handles=[
+        mpatches.Patch(color='steelblue', label='Both real & fake'),
+        mpatches.Patch(color='lightsteelblue', label='Single-class only'),
+    ], loc='lower right')
     ax.invert_yaxis()
     _save(fig, path)
 
@@ -159,7 +159,10 @@ def accuracy_by_action(action_metrics, path):
     ax.set_title('Detection Accuracy by Challenge Action')
     ax.set_xlim(0, 120)
     ax.axvline(x=50, color='red', linestyle='--', alpha=0.5)
-    ax.legend(handles=[_BOTH_PATCH, _SINGLE_PATCH], loc='lower right')
+    ax.legend(handles=[
+        mpatches.Patch(color='steelblue', label='Both real & fake'),
+        mpatches.Patch(color='lightsteelblue', label='Single-class only'),
+    ], loc='lower right')
     ax.invert_yaxis()
     _save(fig, path)
 
