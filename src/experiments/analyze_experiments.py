@@ -78,11 +78,6 @@ def compute_significance(real_scores, fake_scores):
 def _analyze_session(frames, ground_truth):
     if not frames:
         return None
-    final_score = frames[-1].get('passive_avg')
-    if final_score is None:
-        return None
-
-    predicts_real = final_score <= THRESHOLD
 
     # action lookup
     frame_action_map = {f['frame']: f.get('action') for f in frames if 'frame' in f}
@@ -104,9 +99,6 @@ def _analyze_session(frames, ground_truth):
 
     return {
         'ground_truth': ground_truth,
-        'final_passive_avg': final_score,
-        'predicts_real': predicts_real,
-        'correct': predicts_real == (ground_truth == 'real'),
         'action_frames': dict(action_frames),
         'category_frames': dict(category_frames),
         'frame_action_map': frame_action_map,
@@ -128,15 +120,23 @@ def load_results(outputs_dir):
             continue
         final_decision = summary.get('final_decision')
         if final_decision not in ('pass', 'fail'):
-            continue    # skip timeout or imcomplete sessions
+            continue    # skip timeout or incomplete sessions
         analysis = _analyze_session(frames, label)
-        if analysis:
-            analysis['session_name'] = session['session_name']
-            analysis['final_decision'] = final_decision
-            if final_decision in ('pass', 'fail'):
-                analysis['predicts_real'] = (final_decision == 'pass')
-                analysis['correct'] = analysis['predicts_real'] == (label == 'real')
-            results.append(analysis)
+        if analysis is None:
+            continue
+        predicts_real = (final_decision == 'pass')
+        # Use deepfake_score from summary — the actual fused score used for the decision.
+        # Fall back to last frame's passive_avg for older sessions without this field.
+        ds = summary.get('deepfake_score')
+        final_score = ds if ds is not None else (frames[-1].get('passive_avg') if frames else None)
+        analysis.update({
+            'session_name':      session['session_name'],
+            'final_decision':    final_decision,
+            'predicts_real':     predicts_real,
+            'correct':           predicts_real == (label == 'real'),
+            'final_passive_avg': final_score,
+        })
+        results.append(analysis)
     return results
 
 

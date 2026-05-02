@@ -147,9 +147,15 @@ class LivenessDetectionEngine:
 
             temporal_window_stats = self.passive_runner.get_temporal_window_stats()
             final_deepfake = deepfake_score if deepfake_score is not None else self._latest_deepfake_score
+            decision_signals = self.final_status.get('signals') if self.final_status else None
+            passive_ok  = self.final_status.get('passive_ok')  if self.final_status else None
+            identity_ok = self.final_status.get('identity_ok') if self.final_status else None
+            challenge_sequence = '→'.join(get_action_name(a) for a in self.challenge_generator.actions)
             summary = self.statistics_writer.write_summary(
                 self._latest_passive_result, self._latest_identity_result,
                 final_decision, settings.config.deepfake_label, final_deepfake, temporal_window_stats,
+                decision_signals, self.challenge_generator.total_actions(),
+                challenge_sequence, passive_ok, identity_ok,
             )
             print(f"--- SUMMARY ---\n{summary}")
             self.statistics_writer.close()
@@ -172,7 +178,7 @@ class LivenessDetectionEngine:
         id_min_sim = identity_result.min_similarity if identity_result else None
         print(
             f"frame={frame_count:04d} fps={fps:2.0f}"
-            f" | deepfake_score={pct(self._latest_deepfake_score)} avg={pct(p_avg)} cur={pct(p_cur)} smooth={pct(p_smooth)}"
+            f" | deepfake_score={pct(self._latest_deepfake_score)} avg={pct(p_avg)} smooth={pct(p_smooth)} cur={pct(p_cur)}"
             f" | spatial={pct(p_s)} frequency={pct(p_f)} temporal={pct(p_t)}"
             f" | identity_score={pct(id_score)} min_similarity={pct(id_min_sim)}"
         )
@@ -229,7 +235,7 @@ class LivenessDetectionEngine:
             module.put_frame(rendered, frame_count, action_message)
 
         self._last_output_frame_count = frame_count
-        self.statistics_writer.write_frame(frame_count, interactive_result, passive_result, identity_result, action, completed, total)
+        self.statistics_writer.write_frame(frame_count, interactive_result, passive_result, identity_result, action, completed, total, decision)
         if self.web_output:
             self._send_web_overlay(interactive_result, passive_result, identity_result, action, decision, completed, total, overlay)
         return decision

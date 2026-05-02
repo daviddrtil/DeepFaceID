@@ -94,10 +94,18 @@ class DecisionLogic:
         boost_alpha = _sigmoid(max_evidence, center=0.80, steepness=20)
         score = (1.0 - boost_alpha) * avg_score + boost_alpha * max_evidence
 
-        return min(1.0, score)
+        signal_values = {
+            'action': round(weighted_action, 4),
+            'spatial_evidence': round(spatial_evidence, 4),
+            'temporal_evidence': round(temporal_evidence, 4),
+            'temporal_fake_ratio': round(temporal_fake_ratio, 4),
+            'identity_penalty': round(identity_penalty, 4),
+            'boost_alpha': round(boost_alpha, 4),
+        }
+        return min(1.0, score), signal_values
 
     def fuse(self, passive_result, identity_result, actions_completed_count, actions_count, timeout_failed=False, passive_runner=None):
-        deepfake_score = self._compute_deepfake_score(passive_result, identity_result, passive_runner)
+        deepfake_score, signals = self._compute_deepfake_score(passive_result, identity_result, passive_runner)
 
         if deepfake_score >= self.CONFIDENT_FAKE_SCORE:
             self._deepfake_flagged = True
@@ -115,6 +123,7 @@ class DecisionLogic:
             'identity_ok': identity_ok,
             'passive': passive_result,
             'deepfake_score': deepfake_score,
+            'signals': signals,
         }
 
         if timeout_failed:
