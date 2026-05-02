@@ -6,7 +6,7 @@ from collections import defaultdict
 _src_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_src_dir))
 
-from core.decision_logic import DecisionLogic
+from core.decision_logic import DecisionLogic, PASSIVE_WEIGHTS
 from interactive.action_enum import PoseAction, OcclusionAction, ExpressionAction, HoldStillAction
 import session_parser
 import draw_graphs
@@ -51,6 +51,27 @@ def _score_stats(values):
     return {'mean': mean, 'std': std, 'min': min(values), 'max': max(values), 'n': n}
 
 
+def _action_aware_score(frame, frame_action_map):
+    spatial = frame.get('spatial')
+    frequency = frame.get('frequency')
+    temporal = frame.get('temporal')
+
+    t_ref = frame.get('temporal_frame')
+    if t_ref is not None and frame_action_map.get(t_ref) != frame.get('action'):
+        temporal = None  # temporal window predates the current action  # TODO: not sure with this
+
+    parts = [
+        (spatial,   PASSIVE_WEIGHTS.get('spatial',   0)),
+        (frequency, PASSIVE_WEIGHTS.get('frequency', 0)),
+        (temporal,  PASSIVE_WEIGHTS.get('temporal',  0)),
+    ]
+    active = [(v, w) for v, w in parts if v is not None and w > 0]
+    if not active:
+        return None
+    total_w = sum(w for _, w in active)
+    return sum(v * w for v, w in active) / total_w
+
+
 def _fmt(stats, precision=3):
     if stats is None or stats.get('mean') is None:
         return '  N/A'
@@ -73,11 +94,15 @@ def _analyze_session(frames, ground_truth):
         return None
 
     predicts_real = final_score <= THRESHOLD
+
+    # action lookup
+    frame_action_map = {f['frame']: f.get('action') for f in frames if 'frame' in f}
+
     action_frames = defaultdict(list)
     category_frames = defaultdict(list)
     for f in frames:
-        if f.get('passive_avg') is None:
-            continue
+        if f.get('spatial') is None:
+            continue    # Skip frames where no detector has result
         if action := f.get('action'):
             action_frames[action].append(f)
         if cat := f.get('action_category'):
@@ -93,6 +118,7 @@ def _analyze_session(frames, ground_truth):
         'correct': predicts_real == (ground_truth == 'real'),
         'action_frames': dict(action_frames),
         'category_frames': dict(category_frames),
+        'frame_action_map': frame_action_map,
         'total_frames': len(frames),
         'face_detection_rate': face_rate,
         'analyzer_stats': {
@@ -129,12 +155,13 @@ def load_results(outputs_dir):
 
 
 def _group_metrics(results, frames_field):
-    """Compute per-group accuracy and score stats from frame-level data."""
     groups = defaultdict(lambda: {'real': [], 'fake': []})
     for r in results:
         key = 'real' if r['ground_truth'] == 'real' else 'fake'
+        frame_action_map = r.get('frame_action_map', {})
         for name, frames in r[frames_field].items():
-            scores = [f['passive_avg'] for f in frames if f.get('passive_avg') is not None]
+            scores = [_action_aware_score(f, frame_action_map) for f in frames]
+            scores = [s for s in scores if s is not None]
             if scores:
                 groups[name][key].append(sum(scores) / len(scores))
     return {

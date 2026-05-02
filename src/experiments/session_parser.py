@@ -1,3 +1,4 @@
+import ast
 import re
 from pathlib import Path
 
@@ -6,6 +7,7 @@ _FOLDER_RE = re.compile(r'^(.+?)(?:_(real|fake))?_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}
 _KV_RE = re.compile(r'(\w+)=\s*(\S+)')
 _QUOTED_RE = re.compile(r"(\w+)='([^']*)'")
 _CHALLENGE_RE = re.compile(r'challenge=(\d+)/(\d+)')
+_LIST_KV_RE = re.compile(r'(\w+)=(\[.*?\])')
 
 
 def _parse_val(val):
@@ -44,6 +46,14 @@ def parse_stats_line(line):
     for key, val in _QUOTED_RE.findall(sections[4]):
         result[key] = None if val == 'None' else val
 
+    # sections[5]: pose/occlusions/expressions as Python list literals
+    if len(sections) >= 6:
+        for key, val in _LIST_KV_RE.findall(sections[5]):
+            try:
+                result[key] = ast.literal_eval(val)
+            except (ValueError, SyntaxError):
+                pass
+
     return result
 
 
@@ -64,6 +74,11 @@ def load_session(stats_file):
                     key = key.strip()
                     if key in ('label', 'final_decision'):
                         summary[key] = val.strip()
+                    elif key == 'deepfake_score':
+                        try:
+                            summary[key] = float(val.strip())
+                        except ValueError:
+                            pass
                 for a in ANALYZERS:
                     m = re.search(rf'{a}=(\S+?)\((\d+)\)', line)
                     if m:
