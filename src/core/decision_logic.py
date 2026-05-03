@@ -140,6 +140,7 @@ class DecisionLogic:
             'passive': passive_result,
             'deepfake_score': deepfake_score,
             'signals': signals,
+            'deepfake_flagged': self._deepfake_flagged,
         }
 
         if timeout_failed:

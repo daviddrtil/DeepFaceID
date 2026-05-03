@@ -43,6 +43,10 @@ class LivenessDetectionEngine:
         self.final_status = None
         self._video_writer_initialized = False
         self._start_time = None
+        self._decision_frame = None
+        self._decision_action_index = None
+        self._confident_fake_at_frame = None
+        self._timeout_action = None
 
     @staticmethod
     def load_modules():
@@ -135,7 +139,14 @@ class LivenessDetectionEngine:
                 timeout_failed = self.challenge_timer.failed and not self.challenge_generator.is_finished()
                 decision = self._process_frame(frame_count, preprocessed, interactive_result, identity_result, decision_action, actions_completed, actions_total, timeout_failed, t_frame_start=t_frame_start)
                 passive_result = decision.get('passive')
+                if self._confident_fake_at_frame is None and decision.get('deepfake_flagged'):
+                    self._confident_fake_at_frame = frame_count
                 if decision['status'] in ('pass', 'fail'):
+                    if self._decision_frame is None:
+                        self._decision_frame = frame_count
+                        self._decision_action_index = actions_completed
+                    if timeout_failed and self._timeout_action is None:
+                        self._timeout_action = get_action_name(current_action)
                     self.final_status = decision
                     if self.video_input.is_live:
                         break
@@ -164,6 +175,7 @@ class LivenessDetectionEngine:
             res = self.preprocessor.inference_size
             source_resolution = f"{res[0]}x{res[1]}" if res else None
             input_video = Path(settings.config.input_video_path).name if not settings.config.is_live else 'live'
+            failure_reason = self._failure_reason(final_decision, passive_ok, identity_ok)
             summary = self.statistics_writer.write_summary(
                 self._latest_passive_result, self._latest_identity_result,
                 final_decision, settings.config.deepfake_label, final_deepfake, temporal_window_stats,
@@ -176,6 +188,11 @@ class LivenessDetectionEngine:
                 fps_input=self.video_input.fps,
                 source_resolution=source_resolution,
                 input_video=input_video,
+                decision_frame=self._decision_frame,
+                decision_action_index=self._decision_action_index,
+                confident_fake_at_frame=self._confident_fake_at_frame,
+                timeout_action=self._timeout_action,
+                failure_reason=failure_reason,
             )
             print(f"--- SUMMARY ---\n{summary}")
             self.statistics_writer.close()
@@ -262,6 +279,21 @@ class LivenessDetectionEngine:
         if self.web_output:
             self._send_web_overlay(interactive_result, passive_result, identity_result, action, decision, completed, total, overlay)
         return decision
+
+    def _failure_reason(self, final_decision, passive_ok, identity_ok):
+        if final_decision != 'fail' and final_decision != 'timeout':
+            return None
+        if final_decision == 'timeout':
+            return 'timeout'
+        passive_failed = passive_ok is False
+        identity_failed = identity_ok is False
+        if passive_failed and identity_failed:
+            return 'combined'
+        if passive_failed:
+            return 'passive'
+        if identity_failed:
+            return 'identity'
+        return 'unknown'
 
     @staticmethod
     def _face_bbox_from_result(face_result, frame_shape):

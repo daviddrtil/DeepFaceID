@@ -161,7 +161,7 @@ class StatisticsWriter:
         r['final_decision'] = final_decision or 'unknown'
         return r
 
-    def write_summary(self, passive_result, identity_result, final_decision, deepfake_label, deepfake_score=None, temporal_window_stats=None, decision_signals=None, challenge_total=None, challenge_sequence=None, passive_ok=None, identity_ok=None, duration_seconds=None, frame_count_total=None, processed_count=None, fps_actual=None, fps_input=None, source_resolution=None, input_video=None):
+    def write_summary(self, passive_result, identity_result, final_decision, deepfake_label, deepfake_score=None, temporal_window_stats=None, decision_signals=None, challenge_total=None, challenge_sequence=None, passive_ok=None, identity_ok=None, duration_seconds=None, frame_count_total=None, processed_count=None, fps_actual=None, fps_input=None, source_resolution=None, input_video=None, decision_frame=None, decision_action_index=None, confident_fake_at_frame=None, timeout_action=None, failure_reason=None):
         record = self._build_summary(passive_result, identity_result, final_decision, deepfake_label, deepfake_score, temporal_window_stats)
         if challenge_total is not None:
             record['challenge_total'] = challenge_total
@@ -174,6 +174,16 @@ class StatisticsWriter:
         if decision_signals:
             for k, v in decision_signals.items():
                 record[f'signal_{k}'] = v
+        if decision_frame is not None:
+            record['decision_frame'] = decision_frame
+        if decision_action_index is not None:
+            record['decision_action_index'] = decision_action_index
+        if confident_fake_at_frame is not None:
+            record['confident_fake_at_frame'] = confident_fake_at_frame
+        if timeout_action is not None:
+            record['timeout_action'] = timeout_action
+        if failure_reason is not None:
+            record['failure_reason'] = failure_reason
         if duration_seconds is not None:
             record['duration_seconds'] = round(duration_seconds, 3)
         if frame_count_total is not None:
