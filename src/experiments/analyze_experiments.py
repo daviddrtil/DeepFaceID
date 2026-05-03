@@ -103,6 +103,15 @@ def load_results(outputs_dir):
             'final_score': final_score,
             'actions': actions,
             'frames': frames,
+            'decision_frame': summary.get('decision_frame'),
+            'decision_action_index': summary.get('decision_action_index'),
+            'confident_fake_at_frame': summary.get('confident_fake_at_frame'),
+            'failure_reason': summary.get('failure_reason'),
+            'fps_actual': summary.get('fps_actual'),
+            'fps_input': summary.get('fps_input'),
+            'duration_seconds': summary.get('duration_seconds'),
+            'target_identity': summary.get('target_identity'),
+            'target_similarity': summary.get('target_similarity'),
         })
         results.append(analysis)
     return results
@@ -428,6 +437,10 @@ def generate_graphs(results, metrics, action_metrics, category_metrics, analyzer
     draw_graphs.score_over_time(results, THRESHOLD, output_dir / "score_over_time.png")
     draw_graphs.holdstill_vs_interactive(action_metrics, output_dir / "holdstill_vs_interactive.png")
     draw_graphs.action_weight_justification(action_metrics, ACTION_WEIGHTS, output_dir / "action_weight_justification.png")
+    draw_graphs.latency_distribution(results, output_dir / "latency_distribution.png")
+    draw_graphs.time_to_decision(results, output_dir / "time_to_decision.png")
+    draw_graphs.time_to_complete_per_action(results, output_dir / "time_to_complete_per_action.png")
+    draw_graphs.identity_score_over_time(results, output_dir / "identity_score_over_time.png")
 
 
 if __name__ == '__main__':

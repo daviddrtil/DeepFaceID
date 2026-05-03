@@ -276,6 +276,125 @@ def holdstill_vs_interactive(action_metrics, path, calibration_category='calibra
     _save(fig, path)
 
 
+def latency_distribution(sessions, path, percentiles=(50, 95, 99)):
+    # Histogram of per-frame pipeline latency pooled across all sessions, with
+    # vertical lines at the requested percentiles. Answers the real-time deployability
+    # claim ("99% of frames processed under X ms").
+    values = []
+    for s in sessions:
+        for f in s.get('frames', []):
+            v = f.get('pipeline_ms')
+            if v is not None:
+                values.append(float(v))
+    if not values:
+        return
+    arr = pd.Series(values)
+    fig, ax = plt.subplots(figsize=(10, 5))
+    sns.histplot(arr, bins=40, color='steelblue', alpha=0.7, ax=ax)
+    palette = sns.color_palette('rocket_r', len(percentiles))
+    for p, color in zip(percentiles, palette):
+        v = arr.quantile(p / 100)
+        ax.axvline(v, color=color, linestyle='--', linewidth=1.6, label=f'P{p} = {v:.1f} ms')
+    ax.set_xlabel('Per-frame pipeline latency (ms)')
+    ax.set_ylabel('Frame count')
+    ax.set_title(f'Pipeline Latency Distribution (n={len(values)} frames across {len(sessions)} sessions)')
+    ax.legend(loc='upper right')
+    _save(fig, path)
+
+
+def time_to_decision(sessions, path):
+    # Distribution of seconds-to-verdict, grouped by generator (or 'real').
+    # decision_frame and fps_actual come from summary; sessions where the
+    # verdict never fired (timeout, incomplete) are skipped.
+    rows = []
+    for s in sessions:
+        df_idx = s.get('decision_frame')
+        fps = s.get('fps_actual')
+        if df_idx is None or fps is None or fps <= 0:
+            continue
+        gen = s.get('generator') or s.get('ground_truth') or 'unknown'
+        rows.append({'group': gen, 'seconds': float(df_idx) / float(fps), 'gt': s.get('ground_truth')})
+    if not rows:
+        return
+    df = pd.DataFrame(rows)
+    order = sorted(df['group'].unique())
+    palette = sns.color_palette('Set2', len(order))
+    fig, ax = plt.subplots(figsize=(10, max(4, len(order) * 0.9)))
+    sns.boxplot(data=df, y='group', x='seconds', order=order, ax=ax,
+                palette=palette, fill=False, linewidth=1.2, fliersize=0, width=0.5)
+    sns.stripplot(data=df, y='group', x='seconds', order=order, ax=ax,
+                  palette=palette, jitter=0.2, alpha=0.85, size=7)
+    ax.set_xlabel('Time to verdict (seconds)')
+    ax.set_ylabel('Generator / class')
+    ax.set_title(f'Time to Decision by Generator (n={len(rows)} sessions)')
+    ax.set_xlim(left=0)
+    _save(fig, path)
+
+
+def time_to_complete_per_action(sessions, path):
+    # Boxplot of action duration in seconds, per challenge action, real vs fake.
+    # Useful for tuning action timeouts and for the UX claim that 'occlusion
+    # actions take noticeably longer than pose'.
+    rows = []
+    for s in sessions:
+        fps = s.get('fps_actual')
+        if fps is None or fps <= 0:
+            continue
+        gt = s.get('ground_truth') or 'unknown'
+        for a in s.get('actions', []):
+            fc = a.get('frame_count')
+            name = a.get('action')
+            if fc is None or not name:
+                continue
+            rows.append({'action': name, 'Class': gt, 'seconds': float(fc) / float(fps)})
+    if not rows:
+        return
+    df = pd.DataFrame(rows)
+    action_order = sorted(df['action'].unique())
+    fig, ax = plt.subplots(figsize=(10, max(5, len(action_order) * 0.7)))
+    _boxstrip(df.rename(columns={'seconds': 'Score'}), 'action', action_order, ax)
+    ax.set_xlabel('Action duration (seconds)')
+    ax.set_ylabel('Action')
+    ax.set_title('Time to Complete per Action (real vs fake)')
+    ax.set_xlim(left=0)
+    _save(fig, path)
+
+
+def identity_score_over_time(sessions, path, max_panels=4):
+    # Per-frame identity score trajectories for representative real/fake sessions.
+    # Picks up to max_panels with a balanced real/fake split.
+    real = [s for s in sessions if s.get('ground_truth') == 'real']
+    fake = [s for s in sessions if s.get('ground_truth') == 'fake']
+    half = max_panels // 2
+    picked = real[:half] + fake[:max_panels - half]
+    if not picked:
+        return
+    fig, axes = plt.subplots(len(picked), 1, figsize=(12, 2.4 * len(picked)), sharex=False)
+    if len(picked) == 1:
+        axes = [axes]
+    for ax, s in zip(axes, picked):
+        df = pd.DataFrame(s.get('frames', []))
+        if df.empty or 'id_score' not in df.columns:
+            continue
+        df = df[df['id_score'].notna()]
+        gt = s.get('ground_truth', '?')
+        color = _BOTH_COLORS.get(gt, 'gray')
+        ax.plot(df['frame'], df['id_score'], color=color, linewidth=1.4, label='id_score')
+        if 'id_min' in df.columns:
+            ax.plot(df['frame'], df['id_min'], color=color, linewidth=0.8, alpha=0.5, linestyle='--', label='id_min')
+        for row in s.get('actions', []):
+            fe = row.get('frame_end')
+            if fe is not None:
+                ax.axvline(x=fe, color='gray', linestyle=':', alpha=0.4)
+        ax.set_ylim(0, 1.05)
+        ax.set_ylabel('identity')
+        ax.set_title(f"{s.get('session_name', '')}  (GT: {gt})", fontsize=9, loc='left')
+        ax.legend(loc='lower left', fontsize=8)
+    axes[-1].set_xlabel('Frame index')
+    fig.suptitle('Identity Score over Time (action boundaries dotted)')
+    _save(fig, path)
+
+
 def action_weight_justification(action_metrics, action_weights, path):
     # Scatter of assigned per-category weight vs. empirical discriminative gap
     rows = []
