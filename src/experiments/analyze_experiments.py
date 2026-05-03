@@ -110,8 +110,7 @@ def load_results(outputs_dir):
             'fps_actual': summary.get('fps_actual'),
             'fps_input': summary.get('fps_input'),
             'duration_seconds': summary.get('duration_seconds'),
-            'target_identity': summary.get('target_identity'),
-            'target_similarity': summary.get('target_similarity'),
+            'gender': summary.get('gender'),
         })
         results.append(analysis)
     return results

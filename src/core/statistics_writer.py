@@ -161,7 +161,7 @@ class StatisticsWriter:
         r['final_decision'] = final_decision or 'unknown'
         return r
 
-    def write_summary(self, passive_result, identity_result, final_decision, deepfake_label, deepfake_score=None, temporal_window_stats=None, decision_signals=None, challenge_total=None, challenge_sequence=None, passive_ok=None, identity_ok=None, duration_seconds=None, frame_count_total=None, processed_count=None, fps_actual=None, fps_input=None, source_resolution=None, input_video=None, decision_frame=None, decision_action_index=None, confident_fake_at_frame=None, timeout_action=None, failure_reason=None, subject_id=None, generator=None, attack_model=None, target_identity=None, target_similarity=None):
+    def write_summary(self, passive_result, identity_result, final_decision, deepfake_label, deepfake_score=None, temporal_window_stats=None, decision_signals=None, challenge_total=None, challenge_sequence=None, passive_ok=None, identity_ok=None, duration_seconds=None, frame_count_total=None, processed_count=None, fps_actual=None, fps_input=None, source_resolution=None, input_video=None, decision_frame=None, decision_action_index=None, confident_fake_at_frame=None, timeout_action=None, failure_reason=None, subject_id=None, gender=None, generator=None, attack_model=None):
         record = self._build_summary(passive_result, identity_result, final_decision, deepfake_label, deepfake_score, temporal_window_stats)
         if challenge_total is not None:
             record['challenge_total'] = challenge_total
@@ -200,14 +200,12 @@ class StatisticsWriter:
             record['input_video'] = input_video
         if subject_id is not None:
             record['subject_id'] = subject_id
+        if gender is not None:
+            record['gender'] = gender
         if generator is not None:
             record['generator'] = generator
         if attack_model is not None:
             record['attack_model'] = attack_model
-        if target_identity is not None:
-            record['target_identity'] = target_identity
-        if target_similarity is not None:
-            record['target_similarity'] = round(float(target_similarity), 4)
         with open(self._summary_path, 'w', encoding='utf-8', newline='') as f:
             w = csv.DictWriter(f, fieldnames=list(record.keys()))
             w.writeheader()

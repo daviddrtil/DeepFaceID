@@ -2,7 +2,7 @@ import sys
 import pandas as pd
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from src.utils.session_metadata import parse_session_name
 
 
