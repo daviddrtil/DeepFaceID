@@ -16,6 +16,8 @@ from interactive.interactive_runner import InteractiveRunner
 from passive.passive_runner import PassiveRunner
 from preprocessing.preprocessor import Preprocessor
 from preprocessing.video_input import EndOfStreamError
+from src.utils.session_metadata import parse_session_name
+from identity.targets import lookup as lookup_target_identity
 
 
 class LivenessDetectionEngine:
@@ -176,6 +178,9 @@ class LivenessDetectionEngine:
             source_resolution = f"{res[0]}x{res[1]}" if res else None
             input_video = Path(settings.config.input_video_path).name if not settings.config.is_live else 'live'
             failure_reason = self._failure_reason(final_decision, passive_ok, identity_ok)
+            session_meta = parse_session_name(Path(settings.config.output_dir).name)
+            target_identity, target_similarity = lookup_target_identity(
+                session_meta.get('subject_id'), session_meta.get('attack_model'))
             summary = self.statistics_writer.write_summary(
                 self._latest_passive_result, self._latest_identity_result,
                 final_decision, settings.config.deepfake_label, final_deepfake, temporal_window_stats,
@@ -193,6 +198,11 @@ class LivenessDetectionEngine:
                 confident_fake_at_frame=self._confident_fake_at_frame,
                 timeout_action=self._timeout_action,
                 failure_reason=failure_reason,
+                subject_id=session_meta.get('subject_id'),
+                generator=session_meta.get('generator'),
+                attack_model=session_meta.get('attack_model'),
+                target_identity=target_identity,
+                target_similarity=target_similarity,
             )
             print(f"--- SUMMARY ---\n{summary}")
             self.statistics_writer.close()
