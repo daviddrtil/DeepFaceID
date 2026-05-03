@@ -20,7 +20,7 @@ def _sigmoid(x, center, steepness):
 
 
 class DecisionLogic:
-    DEEPFAKE_SCORE_THRESHOLD = 0.40
+    DEEPFAKE_SCORE_THRESHOLD = 0.50
     SIMILARITY_REJECT_THRESHOLD = 0.20
     IDENTITY_SCORE_THRESHOLD = 0.45
     CONFIDENT_FAKE_SCORE = 0.90
@@ -41,11 +41,27 @@ class DecisionLogic:
         temporal_windows = [v for f, v in sorted(temporal_buf.items()) if start <= f <= frame_count]
 
         spatial_max = max(spatial_scores) if spatial_scores else 0.0
+        spatial_avg = sum(spatial_scores) / len(spatial_scores) if spatial_scores else 0.0
         temporal_max = max(temporal_windows) if temporal_windows else 0.0
+        temporal_avg = sum(temporal_windows) / len(temporal_windows) if temporal_windows else 0.0
 
         action_score = spatial_max * 0.9 + temporal_max * 0.1
         self._action_scores.append((action_score, weight))
-        self._action_start_frame = frame_count
+        self._action_start_frame = frame_count + 1  # next action starts after this frame
+
+        return {
+            'frame_start': start,
+            'frame_end': frame_count,
+            'frame_count': frame_count - start + 1,
+            'spatial_max': round(spatial_max,  4),
+            'spatial_avg': round(spatial_avg,  4),
+            'spatial_samples': len(spatial_scores),
+            'temporal_max': round(temporal_max, 4),
+            'temporal_avg': round(temporal_avg, 4),
+            'temporal_samples': len(temporal_windows),
+            'action_score': round(action_score, 4),
+            'weight': weight,
+        }
 
     def _compute_deepfake_score(self, passive_result, identity_result, passive_runner):
         weighted_action = 0.0
@@ -129,7 +145,7 @@ class DecisionLogic:
         if timeout_failed:
             return {**base, 'status': 'fail', 'display_status': 'Action Timeout', 'interactive_complete': False}
 
-        # TODO: reenable after system testing and experimenting, where we dont want to auto-reject
+        # Re-enable after system testing and experimenting, where we dont want to auto-reject
         # if identity_rejection:
         #     return {**base, 'status': 'fail', 'display_status': 'Identity Mismatch', 'identity_ok': False, 'interactive_complete': False}
 
@@ -141,6 +157,6 @@ class DecisionLogic:
         if passive_ok and identity_ok:
             return {**base, 'status': 'pass', 'display_status': 'Authorized', 'interactive_complete': True}
 
-        # display_status = 'Identity Inconsistent' if not identity_ok else 'Not Authorized'
+        # Display_status is 'Identity Inconsistent' if not identity_ok else 'Not Authorized'
         display_status = 'Not Authorized'
         return {**base, 'status': 'fail', 'display_status': display_status, 'interactive_complete': True}

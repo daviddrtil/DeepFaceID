@@ -55,16 +55,19 @@ def metrics_summary(metrics, roc_auc, eer, path):
 
 
 def score_distribution(results, threshold, path):
-    rows = [{'score': r['final_passive_avg'], 'class': r['ground_truth']} for r in results]
+    rows = [{'score': r['final_score'], 'class': r['ground_truth']}
+            for r in results if r.get('final_score') is not None]
     if not rows:
         return
     df = pd.DataFrame(rows)
+    # KDE needs >=2 samples per class; fall back to histogram-only at low N.
+    use_kde = df.groupby('class').size().min() >= 3
     fig, ax = plt.subplots(figsize=(8, 5))
-    sns.histplot(data=df, x='score', hue='class', kde=True, bins=20,
+    sns.histplot(data=df, x='score', hue='class', kde=use_kde, bins=20,
                  palette=_BOTH_COLORS, alpha=0.6, ax=ax)
     ax.axvline(x=threshold, color='black', linestyle='--', linewidth=2,
                label=f'Threshold ({threshold})')
-    ax.set_xlabel('Passive Score (lower = more likely real)')
+    ax.set_xlabel('Fused Deepfake Score (lower = more likely real)')
     ax.set_ylabel('Count')
     ax.set_title('Score Distribution by Class')
     ax.legend()
@@ -87,8 +90,27 @@ def roc_curve(fpr, tpr, auc, path):
     _save(fig, path)
 
 
+def roc_curve_overlay(curves, path):
+    # curves: list of (label, fpr, tpr, auc); plotted on a single axis with diagonal baseline.
+    valid = [(label, fpr, tpr, auc) for label, fpr, tpr, auc in curves if fpr and tpr]
+    if not valid:
+        return
+    palette = sns.color_palette('muted', len(valid))
+    fig, ax = plt.subplots(figsize=(7, 7))
+    for (label, fpr, tpr, auc), color in zip(valid, palette):
+        ax.plot(fpr, tpr, color=color, linewidth=2, label=f'{label} (AUC = {auc:.3f})')
+    ax.plot([0, 1], [0, 1], 'r--', alpha=0.5, label='Random classifier')
+    ax.set_xlabel('False Positive Rate')
+    ax.set_ylabel('True Positive Rate')
+    ax.set_title('ROC Curves by Subsystem')
+    ax.legend(loc='lower right')
+    ax.set_xlim(-0.02, 1.02)
+    ax.set_ylim(-0.02, 1.02)
+    ax.set_aspect('equal')
+    _save(fig, path)
+
+
 def _boxstrip(df, y_col, y_order, ax):
-    """Boxplot (outline only) + individual points — works well even with few samples."""
     common = dict(data=df, y=y_col, x='Score', hue='Class',
                   palette=_BOTH_COLORS, order=y_order, orient='h', ax=ax)
     sns.boxplot(**common, fill=False, linewidth=1.2, fliersize=0, width=0.5, gap=0.1)
@@ -163,6 +185,7 @@ def accuracy_by_action(action_metrics, path):
                 f'{row["accuracy"]:.0f}% (r={row["real_count"]}, f={row["fake_count"]})',
                 va='center', fontsize=9)
     ax.set_xlabel('Accuracy (%)')
+    ax.set_ylabel('Action')
     ax.set_title('Detection Accuracy by Challenge Action')
     ax.set_xlim(0, 120)
     ax.axvline(x=50, color='red', linestyle='--', alpha=0.5)
@@ -173,7 +196,7 @@ def accuracy_by_action(action_metrics, path):
     _save(fig, path)
 
 
-def scores_by_action(action_metrics, path):
+def scores_by_action(action_metrics, path, score_label='Score'):
     rows = []
     for action, m in action_metrics.items():
         for score in m.get('real_scores', []):
@@ -186,7 +209,106 @@ def scores_by_action(action_metrics, path):
     action_order = sorted(df['action'].unique())
     fig, ax = plt.subplots(figsize=(10, max(6, len(action_order) * 0.7)))
     _boxstrip(df, 'action', action_order, ax)
-    ax.set_xlabel('Average Passive Score')
+    ax.set_xlabel(score_label)
+    ax.set_ylabel('Action')
     ax.set_title('Scores by Action (Real vs Fake)')
+    _save(fig, path)
+
+
+def score_over_time(sessions, threshold, path, score_col='deepfake_score', max_panels=4):
+    # Per-session deepfake_score trajectory with action boundaries marked
+    real = [s for s in sessions if s.get('ground_truth') == 'real']
+    fake = [s for s in sessions if s.get('ground_truth') == 'fake']
+    half = max_panels // 2
+    picked = real[:half] + fake[:max_panels - half]
+    if not picked:
+        return
+    n = len(picked)
+    fig, axes = plt.subplots(n, 1, figsize=(12, 2.6 * n), sharex=False)
+    if n == 1:
+        axes = [axes]
+    for ax, s in zip(axes, picked):
+        df = pd.DataFrame(s['frames'])
+        if df.empty or score_col not in df.columns:
+            continue
+        df = df[df[score_col].notna()]
+        gt = s.get('ground_truth', '?')
+        color = _BOTH_COLORS.get(gt, 'gray')
+        ax.plot(df['frame'], df[score_col], color=color, linewidth=1.4, label=f'{gt}')
+        ax.axhline(y=threshold, color='black', linestyle='--', linewidth=1, alpha=0.6, label=f'thr={threshold}')
+        for row in s.get('actions', []):
+            fe = row.get('frame_end')
+            if fe is not None:
+                ax.axvline(x=fe, color='gray', linestyle=':', alpha=0.5)
+            fs = row.get('frame_start')
+            name = row.get('action', '')
+            if fs is not None and name:
+                ax.text(fs + 2, 0.95, name, fontsize=7, rotation=90,
+                        va='top', ha='left', alpha=0.7, transform=ax.get_xaxis_transform())
+        ax.set_ylim(-0.02, 1.05)
+        ax.set_ylabel('score')
+        ax.set_title(f"{s.get('session_name', '')}  (GT: {gt})", fontsize=9, loc='left')
+        ax.legend(loc='upper right', fontsize=8)
+    axes[-1].set_xlabel('Frame index')
+    fig.suptitle('Fused Deepfake Score over Time (action boundaries dotted)')
+    _save(fig, path)
+
+
+def holdstill_vs_interactive(action_metrics, path, calibration_category='calibration'):
+    # Boxplot of action-level scores: passive baseline (Hold Still) vs active interaction
+    rows = []
+    for action, m in action_metrics.items():
+        cat = m.get('category')
+        group = 'Hold Still (passive baseline)' if cat == calibration_category else 'Active interaction'
+        for s in m.get('real_scores', []):
+            rows.append({'group': group, 'Class': 'real', 'Score': s})
+        for s in m.get('fake_scores', []):
+            rows.append({'group': group, 'Class': 'fake', 'Score': s})
+    if not rows:
+        return
+    df = pd.DataFrame(rows)
+    order = ['Hold Still (passive baseline)', 'Active interaction']
+    fig, ax = plt.subplots(figsize=(8, 5))
+    _boxstrip(df, 'group', order, ax)
+    ax.set_xlabel('Action Score')
+    ax.set_ylabel('')
+    ax.set_title('Passive Baseline vs. Active Interaction (real vs fake)')
+    _save(fig, path)
+
+
+def action_weight_justification(action_metrics, action_weights, path):
+    # Scatter of assigned per-category weight vs. empirical discriminative gap
+    rows = []
+    for action, m in action_metrics.items():
+        rs, fs = m.get('real_stats', {}), m.get('fake_stats', {})
+        rm, fm = rs.get('mean'), fs.get('mean')
+        if rm is None or fm is None:
+            continue
+        cat = m.get('category', '?')
+        rows.append({
+            'action': action,
+            'category': cat,
+            'weight': action_weights.get(cat, 1.0),
+            'gap': fm - rm,
+            'n': m.get('total', 0),
+        })
+    if not rows:
+        return
+    df = pd.DataFrame(rows)
+    fig, ax = plt.subplots(figsize=(8, 6))
+    cats = sorted(df['category'].unique())
+    palette = dict(zip(cats, sns.color_palette('muted', len(cats))))
+    for cat in cats:
+        sub = df[df['category'] == cat]
+        ax.scatter(sub['weight'], sub['gap'], s=80, label=cat,
+                   color=palette[cat], edgecolor='black', alpha=0.85)
+    for _, r in df.iterrows():
+        ax.annotate(r['action'], (r['weight'], r['gap']),
+                    fontsize=7, xytext=(4, 4), textcoords='offset points', alpha=0.8)
+    ax.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
+    ax.set_xlabel('Assigned Category Weight')
+    ax.set_ylabel('Empirical Score Gap (mean fake - mean real)')
+    ax.set_title('Action Weight Justification: assigned weight vs empirical discriminative power')
+    ax.legend(title='Category', loc='best', fontsize=8)
     _save(fig, path)
 
