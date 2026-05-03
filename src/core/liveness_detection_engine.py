@@ -16,7 +16,7 @@ from interactive.interactive_runner import InteractiveRunner
 from passive.passive_runner import PassiveRunner
 from preprocessing.preprocessor import Preprocessor
 from preprocessing.video_input import EndOfStreamError
-from src.utils.session_metadata import parse_session_name
+from utils.session_metadata import parse_session_name
 
 
 class LivenessDetectionEngine:
@@ -169,7 +169,7 @@ class LivenessDetectionEngine:
             decision_signals = self.final_status.get('signals') if self.final_status else None
             passive_ok  = self.final_status.get('passive_ok')  if self.final_status else None
             identity_ok = self.final_status.get('identity_ok') if self.final_status else None
-            challenge_sequence = '→'.join(get_action_name(a) for a in self.challenge_generator.actions)
+            challenge_sequence = '|'.join(get_action_name(a) for a in self.challenge_generator.actions)
             duration_seconds = time.time() - start_time
             frame_count_total = (self._last_frame_count + 1) if self._last_frame_count is not None else 0
             fps_actual = processed_count / duration_seconds if duration_seconds > 0 else None

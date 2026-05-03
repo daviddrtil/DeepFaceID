@@ -3,7 +3,7 @@ import pandas as pd
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from src.utils.session_metadata import parse_session_name
+from utils.session_metadata import parse_session_name
 
 
 def _load_csv_frames(path):
