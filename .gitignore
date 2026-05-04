@@ -208,6 +208,7 @@ __marimo__/
 
 # Local files
 /src/outputs/
+/src/experiments/results/
 /src/passive/weights/**
 
 # Allow demo videos

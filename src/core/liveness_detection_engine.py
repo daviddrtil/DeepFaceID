@@ -1,6 +1,7 @@
 import time
 import queue
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import settings
 from core.challenge_generator import ChallengeGenerator
@@ -15,6 +16,7 @@ from interactive.interactive_runner import InteractiveRunner
 from passive.passive_runner import PassiveRunner
 from preprocessing.preprocessor import Preprocessor
 from preprocessing.video_input import EndOfStreamError
+from utils.session_metadata import parse_session_name
 
 
 class LivenessDetectionEngine:
@@ -41,6 +43,11 @@ class LivenessDetectionEngine:
         self._latest_deepfake_score = None
         self.final_status = None
         self._video_writer_initialized = False
+        self._start_time = None
+        self._decision_frame = None
+        self._decision_action_index = None
+        self._confident_fake_at_frame = None
+        self._timeout_action = None
 
     @staticmethod
     def load_modules():
@@ -86,7 +93,8 @@ class LivenessDetectionEngine:
         self.passive_runner.start()
         self.identity_tracker.start()
 
-        start_time = time.time()
+        self._start_time = time.time()
+        start_time = self._start_time
         processed_count = 0
 
         try:
@@ -103,6 +111,8 @@ class LivenessDetectionEngine:
                     break
 
                 self._init_video_writer(frame)
+                t_frame_start = time.perf_counter()
+
                 preprocessed = self.preprocessor.process_frame(frame, timestamp_ms, frame_count, self.video_input.fps)
                 self._last_frame_count = frame_count
 
@@ -118,7 +128,9 @@ class LivenessDetectionEngine:
                     self._latest_identity_result = identity_result
 
                 if interactive_result.completed_action is not None:
-                    self.decision_logic.complete_action(interactive_result.completed_action, frame_count, self.passive_runner)
+                    challenge_index = self.challenge_generator.completed_count()
+                    action_data = self.decision_logic.complete_action(current_action, frame_count, self.passive_runner)
+                    self.statistics_writer.write_action(challenge_index, current_action, action_data)
                     self.challenge_generator.mark_current_completed()
                     self.challenge_timer.reset(self.challenge_generator.get_current_action())
 
@@ -126,9 +138,16 @@ class LivenessDetectionEngine:
                 actions_completed = self.challenge_generator.completed_count()
                 actions_total = self.challenge_generator.total_actions()
                 timeout_failed = self.challenge_timer.failed and not self.challenge_generator.is_finished()
-                decision = self._process_frame(frame_count, preprocessed, interactive_result, identity_result, decision_action, actions_completed, actions_total, timeout_failed)
+                decision = self._process_frame(frame_count, preprocessed, interactive_result, identity_result, decision_action, actions_completed, actions_total, timeout_failed, t_frame_start=t_frame_start)
                 passive_result = decision.get('passive')
+                if self._confident_fake_at_frame is None and decision.get('deepfake_flagged'):
+                    self._confident_fake_at_frame = frame_count
                 if decision['status'] in ('pass', 'fail'):
+                    if self._decision_frame is None:
+                        self._decision_frame = frame_count
+                        self._decision_action_index = actions_completed
+                    if timeout_failed and self._timeout_action is None:
+                        self._timeout_action = get_action_name(current_action)
                     self.final_status = decision
                     if self.video_input.is_live:
                         break
@@ -147,9 +166,39 @@ class LivenessDetectionEngine:
 
             temporal_window_stats = self.passive_runner.get_temporal_window_stats()
             final_deepfake = deepfake_score if deepfake_score is not None else self._latest_deepfake_score
+            decision_signals = self.final_status.get('signals') if self.final_status else None
+            passive_ok  = self.final_status.get('passive_ok')  if self.final_status else None
+            identity_ok = self.final_status.get('identity_ok') if self.final_status else None
+            challenge_sequence = '|'.join(get_action_name(a) for a in self.challenge_generator.actions)
+            duration_seconds = time.time() - start_time
+            frame_count_total = (self._last_frame_count + 1) if self._last_frame_count is not None else 0
+            fps_actual = processed_count / duration_seconds if duration_seconds > 0 else None
+            res = self.preprocessor.inference_size
+            source_resolution = f"{res[0]}x{res[1]}" if res else None
+            input_video = Path(settings.config.input_video_path).name if not settings.config.is_live else 'live'
+            failure_reason = self._failure_reason(final_decision, passive_ok, identity_ok)
+            session_meta = parse_session_name(Path(settings.config.output_dir).name)
             summary = self.statistics_writer.write_summary(
                 self._latest_passive_result, self._latest_identity_result,
                 final_decision, settings.config.deepfake_label, final_deepfake, temporal_window_stats,
+                decision_signals, self.challenge_generator.total_actions(),
+                challenge_sequence, passive_ok, identity_ok,
+                duration_seconds=duration_seconds,
+                frame_count_total=frame_count_total,
+                processed_count=processed_count,
+                fps_actual=fps_actual,
+                fps_input=self.video_input.fps,
+                source_resolution=source_resolution,
+                input_video=input_video,
+                decision_frame=self._decision_frame,
+                decision_action_index=self._decision_action_index,
+                confident_fake_at_frame=self._confident_fake_at_frame,
+                timeout_action=self._timeout_action,
+                failure_reason=failure_reason,
+                subject_id=session_meta.get('subject_id'),
+                gender=session_meta.get('gender'),
+                generator=session_meta.get('generator'),
+                attack_model=session_meta.get('attack_model'),
             )
             print(f"--- SUMMARY ---\n{summary}")
             self.statistics_writer.close()
@@ -157,7 +206,7 @@ class LivenessDetectionEngine:
             self.passive_runner.stop()
             self.identity_tracker.stop()
             self._stop_outputs()
-            print(f"Total {self._last_frame_count} frames (interactive processed: {processed_count} frames) in {time.time() - start_time:.1f}s")
+            print(f"Total {frame_count_total} frames (interactive processed: {processed_count} frames) in {duration_seconds:.1f}s")
 
     def _log_progress(self, frame_count, elapsed, processed_count, passive_result, identity_result):
         def pct(v): return f"{v * 100:2.0f}%" if v is not None else "N/A"
@@ -172,7 +221,7 @@ class LivenessDetectionEngine:
         id_min_sim = identity_result.min_similarity if identity_result else None
         print(
             f"frame={frame_count:04d} fps={fps:2.0f}"
-            f" | deepfake_score={pct(self._latest_deepfake_score)} avg={pct(p_avg)} cur={pct(p_cur)} smooth={pct(p_smooth)}"
+            f" | deepfake_score={pct(self._latest_deepfake_score)} avg={pct(p_avg)} smooth={pct(p_smooth)} cur={pct(p_cur)}"
             f" | spatial={pct(p_s)} frequency={pct(p_f)} temporal={pct(p_t)}"
             f" | identity_score={pct(id_score)} min_similarity={pct(id_min_sim)}"
         )
@@ -199,7 +248,7 @@ class LivenessDetectionEngine:
         }
         self.web_output.put_overlay(result)
 
-    def _process_frame(self, frame_count, preprocessed, interactive_result, identity_result, action, completed, total, timeout_failed):
+    def _process_frame(self, frame_count, preprocessed, interactive_result, identity_result, action, completed, total, timeout_failed, t_frame_start=None):
         passive_result = self.passive_runner.get_passive_result()
         if passive_result is not None:
             self._latest_passive_result = passive_result
@@ -229,10 +278,35 @@ class LivenessDetectionEngine:
             module.put_frame(rendered, frame_count, action_message)
 
         self._last_output_frame_count = frame_count
-        self.statistics_writer.write_frame(frame_count, interactive_result, passive_result, identity_result, action, completed, total)
+        wall_time_ms = (time.time() - self._start_time) * 1000 if self._start_time is not None else None
+        pipeline_ms = (time.perf_counter() - t_frame_start) * 1000 if t_frame_start is not None else None
+        face_bbox = self._face_bbox_from_result(interactive_result.face_result, preprocessed['frame'].shape)
+        self.statistics_writer.write_frame(frame_count, interactive_result, passive_result, identity_result, action, completed, total, decision, wall_time_ms=wall_time_ms, pipeline_ms=pipeline_ms, face_bbox=face_bbox)
         if self.web_output:
             self._send_web_overlay(interactive_result, passive_result, identity_result, action, decision, completed, total, overlay)
         return decision
+
+    def _failure_reason(self, final_decision, passive_ok, identity_ok):
+        if final_decision != 'fail' and final_decision != 'timeout':
+            return None
+        if final_decision == 'timeout':
+            return 'timeout'
+        passive_failed = passive_ok is False
+        identity_failed = identity_ok is False
+        if passive_failed and identity_failed:
+            return 'combined'
+        if passive_failed:
+            return 'passive'
+        if identity_failed:
+            return 'identity'
+        return 'unknown'
+
+    @staticmethod
+    def _face_bbox_from_result(face_result, frame_shape):
+        if face_result is None or not getattr(face_result, 'face_landmarks', None):
+            return None
+        h, w = frame_shape[:2]
+        return Preprocessor.face_bbox_from_landmarks(face_result.face_landmarks[0], w, h)
 
     def _start_outputs(self):
         for module in self.output_modules:

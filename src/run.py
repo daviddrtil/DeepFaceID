@@ -18,7 +18,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Real-time liveness detection for facial deepfake verification.")
     parser.add_argument("--input-video", type=str, nargs="?", default=project_root / "recordings" / "real_daviddrtil_cover_eye.mp4", help="Path to the input video file (used only in --no-live mode).")
     parser.add_argument("--output-root-dir", type=str, nargs="?", default=project_root / "outputs", help="Base path to the output directory.")
-    parser.add_argument("--stats-filename", type=str, default="stats.txt", help="Filename for the output statistics text file.")
     parser.add_argument("--live", action="store_true", default=True, help="Run the web-based live verification (default: enabled).")
     parser.add_argument("--no-live", action="store_false", dest="live", help="Disable live mode and process static video instead.")
     parser.add_argument("--debug", action="store_true", default=True, help="Enable debug mode to display additional overlay and verbose logging (default: enabled).")

@@ -78,19 +78,28 @@ class Preprocessor:
         return preprocessed
 
     @staticmethod
-    def _crop_face_bbox(frame_bgr, face_result):
+    def face_bbox_from_landmarks(landmarks, frame_w, frame_h, padding=0):
+        if not landmarks:
+            return None
+        xs = [lm.x * frame_w for lm in landmarks]
+        ys = [lm.y * frame_h for lm in landmarks]
+        x1 = max(0, int(min(xs)) - padding)
+        y1 = max(0, int(min(ys)) - padding)
+        x2 = min(frame_w, int(max(xs)) + padding)
+        y2 = min(frame_h, int(max(ys)) + padding)
+        return x1, y1, x2 - x1, y2 - y1
+
+    @classmethod
+    def _crop_face_bbox(cls, frame_bgr, face_result):
         if face_result is None or not face_result.face_landmarks:
             return None
         h, w = frame_bgr.shape[:2]
-        landmarks = face_result.face_landmarks[0]
-        xs = [lm.x * w for lm in landmarks]
-        ys = [lm.y * h for lm in landmarks]
-        x1 = max(0, int(min(xs)) - FACE_PADDING)
-        y1 = max(0, int(min(ys)) - FACE_PADDING)
-        x2 = min(w, int(max(xs)) + FACE_PADDING)
-        y2 = min(h, int(max(ys)) + FACE_PADDING)
+        bbox = cls.face_bbox_from_landmarks(face_result.face_landmarks[0], w, h, padding=FACE_PADDING)
+        if bbox is None:
+            return None
+        x, y, bw, bh = bbox
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        crop = frame_rgb[y1:y2, x1:x2]
+        crop = frame_rgb[y:y + bh, x:x + bw]
         if crop.size == 0:
             return None
         return cv2.resize(crop, (224, 224), interpolation=cv2.INTER_AREA)
