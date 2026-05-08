@@ -140,7 +140,7 @@ def _group_metrics_direct(results, group_by):
         key = 'real' if r['ground_truth'] == 'real' else 'fake'
         for row in r.get('actions', []):
             name = row.get(group_by)
-            score = row.get('action_score')
+            score = row.get('deepfake_score')
             if not (isinstance(name, str) and name) or score is None:
                 continue
             g = groups[name]

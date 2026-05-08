@@ -2,11 +2,10 @@ import math
 from interactive.action_enum import get_action_category
 
 
-PASSIVE_WEIGHTS = {'spatial': 0.8, 'frequency': 0.0, 'temporal': 0.2}
-
 ACTION_WEIGHTS = {
-    'complex': 2.0,
-    'occlusion': 1.8,
+    # Higher weights are assigned to actions expected to expose more artifacts, but kept moderate to limit false positives
+    'complex': 1.25,
+    'occlusion': 1.2,
     'pose': 1.2,
     'sequence': 1.0,
     'expression': 0.8,
@@ -19,6 +18,10 @@ def _sigmoid(x, center, steepness):
     return 1.0 / (1.0 + math.exp(-steepness * (x - center)))
 
 
+def _scores_in_range(buffer, start_frame, end_frame):
+    return [v for f, v in sorted(buffer.items()) if start_frame <= f <= end_frame]
+
+
 class DecisionLogic:
     DEEPFAKE_SCORE_THRESHOLD = 0.50
     SIMILARITY_REJECT_THRESHOLD = 0.20
@@ -26,28 +29,25 @@ class DecisionLogic:
     CONFIDENT_FAKE_SCORE = 0.90
 
     def __init__(self):
-        self._action_scores = []
-        self._action_start_frame = 0
+        self._action_scores = []  # (deepfake_score, weight) per completed action
         self._deepfake_flagged = False
 
-    def complete_action(self, completed_action, frame_count, passive_runner):
+    def score_action(self, completed_action, frame_count, passive_runner, hold_duration_frames=45):
         category = get_action_category(completed_action)
         weight = ACTION_WEIGHTS.get(category, 1.0)
-        start = self._action_start_frame
-        spatial_buf = passive_runner.spatial.get_score_buffer()
-        temporal_buf = passive_runner.temporal.get_score_buffer()
 
-        spatial_scores = [v for f, v in spatial_buf.items() if start <= f <= frame_count]
-        temporal_windows = [v for f, v in sorted(temporal_buf.items()) if start <= f <= frame_count]
+        start = max(0, frame_count - hold_duration_frames + 1)
+        spatial_scores = _scores_in_range(passive_runner.spatial.get_score_buffer(), start, frame_count)
+        temporal_scores = _scores_in_range(passive_runner.temporal.get_score_buffer(), start, frame_count)
+
+        # intentionally excluding indentity_penalty because it is at session-level
+        deepfake_score, signals = self._compute_deepfake_score(spatial_scores, temporal_scores)
+        self._action_scores.append((deepfake_score, weight))
 
         spatial_max = max(spatial_scores) if spatial_scores else 0.0
         spatial_avg = sum(spatial_scores) / len(spatial_scores) if spatial_scores else 0.0
-        temporal_max = max(temporal_windows) if temporal_windows else 0.0
-        temporal_avg = sum(temporal_windows) / len(temporal_windows) if temporal_windows else 0.0
-
-        action_score = spatial_max * 0.9 + temporal_max * 0.1
-        self._action_scores.append((action_score, weight))
-        self._action_start_frame = frame_count + 1  # next action starts after this frame
+        temporal_max = max(temporal_scores) if temporal_scores else 0.0
+        temporal_avg = sum(temporal_scores) / len(temporal_scores) if temporal_scores else 0.0
 
         return {
             'frame_start': start,
@@ -58,70 +58,73 @@ class DecisionLogic:
             'spatial_samples': len(spatial_scores),
             'temporal_max': round(temporal_max, 4),
             'temporal_avg': round(temporal_avg, 4),
-            'temporal_samples': len(temporal_windows),
-            'action_score': round(action_score, 4),
+            'temporal_samples': len(temporal_scores),
+            'deepfake_score': round(deepfake_score, 4),
             'weight': weight,
+            'signals': signals,
         }
 
-    def _compute_deepfake_score(self, passive_result, identity_result, passive_runner):
-        weighted_action = 0.0
-        if self._action_scores:
-            total_w = sum(w for _, w in self._action_scores)
-            weighted_action = sum(s * w for s, w in self._action_scores) / total_w if total_w else 0.0
+    def _compute_deepfake_score(self, spatial_scores, temporal_scores, weighted_action=None, identity_penalty=None):
+        spatial_max = max(spatial_scores) if spatial_scores else 0.0
+        spatial_avg = sum(spatial_scores) / len(spatial_scores) if spatial_scores else 0.0
+        temporal_max = max(temporal_scores) if temporal_scores else 0.0
 
-        spatial_max = passive_result.spatial.max_score if passive_result and passive_result.spatial.max_score else 0.0
-        spatial_avg = passive_result.spatial.avg_score if passive_result and passive_result.spatial.avg_score else 0.0
+        # Calibrate detector peaks to evidence strength
+        spatial_evidence = _sigmoid(spatial_max, center=0.75, steepness=9.2)     # above 0.9 is score > 0.5,  more gradual
+        temporal_evidence = _sigmoid(temporal_max, center=0.90, steepness=28.0)  # above 0.95 is score > 0.5, more strict
 
-        temporal_buf = passive_runner.temporal.get_score_buffer() if passive_runner else {}
-        temporal_max = 0.0
-        temporal_fake_ratio = 0.0
-        if temporal_buf:
-            windows = [v for _, v in sorted(temporal_buf.items())]
-            temporal_max = max(windows)
-            temporal_fake_ratio = sum(1 for m in windows if m > 0.5) / len(windows)
-
-        identity_penalty = 0.0
-        if identity_result and identity_result.embedding_count >= 10:
-            id_score = identity_result.identity_score or 0.0
-            identity_penalty = max(0.0, 0.70 - id_score)
-
-        # Calibrate raw detector outputs to evidence strength via sigmoid.
-        # Spatial UCF: well-separated (<0.10 real, >0.90 fake), center at 0.80
-        # Temporal CViT: noisier (0.3-0.7 real, 0.85+ fake), center at 0.75
-        spatial_evidence = _sigmoid(spatial_max, center=0.80, steepness=15)
-        temporal_evidence = _sigmoid(temporal_max, center=0.75, steepness=12)
-
-        # Weighted average of calibrated + raw signals
-        signals = {}
-        if self._action_scores:
-            signals['action'] = (weighted_action, 2.5)
-        signals['spatial_peak'] = (spatial_evidence, 2.5)
-        signals['spatial_avg'] = (min(1.0, spatial_avg * 5), 1.0)
-        signals['temporal_peak'] = (temporal_evidence, 2.0)
-        signals['temporal_consistency'] = (temporal_fake_ratio, 0.5)
-        signals['identity_penalty'] = (identity_penalty, 1.5)
+        signals = {
+            'spatial_peak': (spatial_evidence, 2.5),
+            'spatial_avg': (min(1.0, spatial_avg * 5), 1.0),  # amplified avg score based on calibration
+        }
+        if temporal_scores:
+            signals['temporal_peak'] = (temporal_evidence, 1.0)
+        if weighted_action is not None:
+            signals['weighted_signal_action'] = (weighted_action, 1.0)
+        if identity_penalty is not None:
+            signals['identity_penalty'] = (identity_penalty, 1.0)
 
         total_weight = sum(w for _, w in signals.values())
         avg_score = sum(v * w for v, w in signals.values()) / total_weight if total_weight else 0.0
 
-        # Smooth evidence boost: when a calibrated detector signal is strong,
-        # blend toward it via a sigmoid-gated alpha — avoids the hard floor
+        # Let strong peak evidence override average score
         max_evidence = max(spatial_evidence, temporal_evidence)
-        boost_alpha = _sigmoid(max_evidence, center=0.80, steepness=20)
+        boost_alpha = _sigmoid(max_evidence, center=0.775, steepness=17.6)
         score = (1.0 - boost_alpha) * avg_score + boost_alpha * max_evidence
 
         signal_values = {
-            'action': round(weighted_action, 4),
+            'weighted_signal_action': round(weighted_action, 4) if weighted_action is not None else 0.0,
             'spatial_evidence': round(spatial_evidence, 4),
             'temporal_evidence': round(temporal_evidence, 4),
-            'temporal_fake_ratio': round(temporal_fake_ratio, 4),
-            'identity_penalty': round(identity_penalty, 4),
+            'identity_penalty': round(identity_penalty, 4) if identity_penalty is not None else 0.0,
+            'avg_score': round(avg_score, 4),
             'boost_alpha': round(boost_alpha, 4),
         }
         return min(1.0, score), signal_values
 
+    def _weighted_action_score(self):
+        if not self._action_scores:
+            return None
+        total_w = sum(w for _, w in self._action_scores)
+        if not total_w:
+            return 0.0
+        return sum(s * w for s, w in self._action_scores) / total_w
+
+    def _identity_penalty(self, identity_result):
+        if identity_result is None or identity_result.embedding_count < 10:
+            return 0.0
+        return max(0.0, 0.70 - (identity_result.identity_score or 0.0))
+
     def fuse(self, passive_result, identity_result, actions_completed_count, actions_count, timeout_failed=False, passive_runner=None):
-        deepfake_score, signals = self._compute_deepfake_score(passive_result, identity_result, passive_runner)
+        spatial_scores = list(passive_runner.spatial.get_score_buffer().values()) if passive_runner else []
+        temporal_scores = list(passive_runner.temporal.get_score_buffer().values()) if passive_runner else []
+
+        deepfake_score, signals = self._compute_deepfake_score(
+            spatial_scores,
+            temporal_scores,
+            weighted_action=self._weighted_action_score(),
+            identity_penalty=self._identity_penalty(identity_result),
+        )
 
         if deepfake_score >= self.CONFIDENT_FAKE_SCORE:
             self._deepfake_flagged = True

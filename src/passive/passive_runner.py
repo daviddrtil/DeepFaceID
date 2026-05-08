@@ -6,10 +6,11 @@ from dataclasses import dataclass
 from passive.passive_analyzer import PassiveAnalyzer, AnalyzerResult
 from passive.spatial_analyzer.ucf_detector import get_ucf_detector
 from passive.temporal_analyzer.cvit_detector import get_cvit_detector, WINDOW_SIZE, INFERENCE_STEP, FAKE_THRESHOLD
-from core.decision_logic import PASSIVE_WEIGHTS
 
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+PASSIVE_WEIGHTS = {'spatial': 0.8, 'frequency': 0.0, 'temporal': 0.2}
 
 
 @dataclass

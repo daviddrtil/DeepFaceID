@@ -129,7 +129,9 @@ class LivenessDetectionEngine:
 
                 if interactive_result.completed_action is not None:
                     challenge_index = self.challenge_generator.completed_count()
-                    action_data = self.decision_logic.complete_action(current_action, frame_count, self.passive_runner)
+                    fps = self.video_input.fps or 30
+                    hold_frames = round(self.challenge_timer.hold_duration_ms / 1000 * fps)
+                    action_data = self.decision_logic.score_action(current_action, frame_count, self.passive_runner, hold_frames)
                     self.statistics_writer.write_action(challenge_index, current_action, action_data)
                     self.challenge_generator.mark_current_completed()
                     self.challenge_timer.reset(self.challenge_generator.get_current_action())

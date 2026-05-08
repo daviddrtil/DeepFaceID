@@ -9,6 +9,7 @@ _FRAME_COLUMNS = [
     'frame', 'wall_time_ms', 'pipeline_ms',
     'spatial_frame', 'frequency_frame', 'temporal_frame',
     'deepfake_score', 'decision',
+    'weighted_signal_action', 'signal_spatial_evidence', 'signal_temporal_evidence', 'signal_identity_penalty', 'signal_avg_score', 'signal_boost_alpha',
     'passive_cur', 'passive_avg', 'passive_max', 'passive_smooth',
     'spatial', 'spatial_avg', 'spatial_max',
     'frequency', 'frequency_avg', 'frequency_max',
@@ -27,7 +28,8 @@ _ACTION_COLUMNS = [
     'frame_start', 'frame_end', 'frame_count',
     'spatial_max', 'spatial_avg', 'spatial_samples',
     'temporal_max', 'temporal_avg', 'temporal_samples',
-    'action_score',
+    'deepfake_score',
+    'signal_spatial_evidence', 'signal_temporal_evidence', 'signal_avg_score', 'signal_boost_alpha',
 ]
 
 
@@ -57,6 +59,7 @@ class StatisticsWriter:
         return '|'.join(v.name for v in (values or []) if v is not None)
 
     def write_action(self, challenge_index, action, action_data):
+        signals = action_data.get('signals') or {}
         record = {
             'challenge_index': challenge_index,
             'action': get_action_name(action),
@@ -71,7 +74,11 @@ class StatisticsWriter:
             'temporal_max': self._f(action_data['temporal_max']),
             'temporal_avg': self._f(action_data['temporal_avg']),
             'temporal_samples': action_data['temporal_samples'],
-            'action_score': self._f(action_data['action_score']),
+            'deepfake_score': self._f(action_data['deepfake_score']),
+            'signal_spatial_evidence':  self._f(signals.get('spatial_evidence')),
+            'signal_temporal_evidence': self._f(signals.get('temporal_evidence')),
+            'signal_avg_score':         self._f(signals.get('avg_score')),
+            'signal_boost_alpha':       self._f(signals.get('boost_alpha')),
         }
         self._action_writer.writerow(record)
         self._actions_file.flush()
@@ -133,6 +140,15 @@ class StatisticsWriter:
             'deepfake_score': self._f(decision_result.get('deepfake_score') if decision_result else None),
             'decision':       decision_result.get('status') if decision_result else None,
         })
+        signals = (decision_result.get('signals') if decision_result else None) or {}
+        record.update({
+            'weighted_signal_action':    self._f(signals.get('weighted_signal_action')),
+            'signal_spatial_evidence':   self._f(signals.get('spatial_evidence')),
+            'signal_temporal_evidence':  self._f(signals.get('temporal_evidence')),
+            'signal_identity_penalty':   self._f(signals.get('identity_penalty')),
+            'signal_avg_score':          self._f(signals.get('avg_score')),
+            'signal_boost_alpha':        self._f(signals.get('boost_alpha')),
+        })
         self._writer.writerow(record)
         self._frames_file.flush()
 
@@ -173,7 +189,8 @@ class StatisticsWriter:
             record['identity_ok'] = identity_ok
         if decision_signals:
             for k, v in decision_signals.items():
-                record[f'signal_{k}'] = v
+                col = k if 'signal' in k else f'signal_{k}'
+                record[col] = v
         if decision_frame is not None:
             record['decision_frame'] = decision_frame
         if decision_action_index is not None:
