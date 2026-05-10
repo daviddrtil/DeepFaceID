@@ -210,6 +210,12 @@ class LivenessDetectionEngine:
             self._stop_outputs()
             print(f"Total {frame_count_total} frames (interactive processed: {processed_count} frames) in {duration_seconds:.1f}s")
 
+            print(f"\n--- ACTIONS ---")
+            action_scores = self.statistics_writer.action_scores
+            for idx, data in enumerate(action_scores):
+                print(f"{idx+1:<2}: category={data['action_category']:<12} action={data['action']:<36} deepfake_score={data['deepfake_score']:.2f} spatial_avg={data['spatial_avg']:.2f} spatial_max={data['spatial_max']:.2f}")
+
+
     def _log_progress(self, frame_count, elapsed, processed_count, passive_result, identity_result):
         def pct(v): return f"{v * 100:2.0f}%" if v is not None else "N/A"
         fps = processed_count / elapsed if elapsed > 0 else 0

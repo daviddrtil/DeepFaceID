@@ -49,6 +49,7 @@ class StatisticsWriter:
         self._action_writer.writeheader()
         self._actions_file.flush()
         self._summary_path = out / self.SUMMARY_FILE
+        self.action_scores = []
 
     @staticmethod
     def _f(value):
@@ -80,6 +81,7 @@ class StatisticsWriter:
             'signal_avg_score':         self._f(signals.get('avg_score')),
             'signal_boost_alpha':       self._f(signals.get('boost_alpha')),
         }
+        self.action_scores.append(record)
         self._action_writer.writerow(record)
         self._actions_file.flush()
 
