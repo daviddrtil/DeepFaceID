@@ -8,7 +8,7 @@ from scipy import stats as scipy_stats
 _src_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_src_dir))
 
-from core.decision_logic import DecisionLogic, ACTION_WEIGHTS
+from core.decision_logic import DecisionLogic
 import session_parser
 import draw_graphs
 
@@ -17,12 +17,12 @@ ANALYZERS = ('spatial', 'temporal')
 THRESHOLD = DecisionLogic.DEEPFAKE_SCORE_THRESHOLD
 CATEGORY_ORDER = ['calibration', 'pose', 'occlusion', 'expression', 'complex', 'sequence']
 CATEGORY_LABELS = {
-    'calibration': 'Hold Still (calibration)',
-    'pose': 'Pose (head movement)',
-    'occlusion': 'Occlusion (hand cover)',
-    'expression': 'Expression (facial)',
-    'complex': 'Complex (concurrent)',
-    'sequence': 'Sequence (sequential)',
+    'calibration': 'Calibration',
+    'pose': 'Pose',
+    'occlusion': 'Occlusion',
+    'expression': 'Expression',
+    'complex': 'Complex',
+    'sequence': 'Sequence',
 }
 
 
@@ -134,13 +134,13 @@ def _build_metrics_dict(groups):
     }
 
 
-def _group_metrics_direct(results, group_by):
+def _group_metrics_direct(results, group_by, score_field='deepfake_score'):
     groups = defaultdict(lambda: {'real': [], 'fake': [], 'category': None})
     for r in results:
         key = 'real' if r['ground_truth'] == 'real' else 'fake'
         for row in r.get('actions', []):
             name = row.get(group_by)
-            score = row.get('deepfake_score')
+            score = row.get(score_field)
             if not (isinstance(name, str) and name) or score is None:
                 continue
             g = groups[name]
@@ -361,6 +361,14 @@ def print_report(metrics, action_metrics, category_metrics, analyzer_metrics, re
             print(f"  {gen:<10s} {m['accuracy']:5.1%} {m['f1']:5.1%} {m['real_count']:6d} {m['fake_count']:6d}  "
                   f"{_fmt(m['real_score_stats']):>20s}  {_fmt(m['fake_score_stats']):>20s}")
 
+    latencies = [float(f['pipeline_ms']) for r in results for f in r.get('frames', [])
+                 if f.get('pipeline_ms') is not None]
+    if latencies:
+        arr = np.array(latencies)
+        print(f"\n--- Pipeline Latency (per-frame, ms) ---")
+        print(f"  P50: {np.percentile(arr, 50):6.2f}   P95: {np.percentile(arr, 95):6.2f}   P99: {np.percentile(arr, 99):6.2f}")
+        print(f"  mean: {arr.mean():.2f}   min: {arr.min():.2f}   max: {arr.max():.2f}   n={len(arr)} frames")
+
     print(f"\n--- Recent Sessions ---")
     for r in results[-10:]:
         mark = "+" if r['correct'] else "x"
@@ -421,25 +429,20 @@ def export_action_csv(action_metrics, path):
     print(f"Exported {len(action_metrics)} actions to {path}")
 
 
-def generate_graphs(results, metrics, action_metrics, category_metrics, analyzer_metrics, fpr, tpr, roc_auc, eer, output_dir):
+def generate_graphs(results, metrics, action_metrics, action_metrics_spatial, category_metrics, analyzer_metrics, roc_auc, eer, output_dir):
     output_dir.mkdir(parents=True, exist_ok=True)
     print(f"\nGenerating graphs in: {output_dir}")
-    draw_graphs.metrics_summary(metrics, roc_auc, eer, output_dir / "metrics_summary.png")
-    draw_graphs.confusion_matrix(metrics, output_dir / "confusion_matrix.png")
-    draw_graphs.score_distribution(results, THRESHOLD, output_dir / "score_distribution.png")
-    draw_graphs.roc_curve(fpr, tpr, roc_auc, output_dir / "roc_curve.png")
-    draw_graphs.roc_curve_overlay(compute_subsystem_roc(results), output_dir / "roc_curve_overlay.png")
-    draw_graphs.analyzer_comparison(analyzer_metrics, ANALYZERS, output_dir / "analyzer_comparison.png")
-    draw_graphs.category_accuracy(category_metrics, CATEGORY_ORDER, CATEGORY_LABELS, output_dir / "category_accuracy.png")
-    draw_graphs.accuracy_by_action(action_metrics, output_dir / "accuracy_by_action.png")
-    draw_graphs.scores_by_action(action_metrics, output_dir / "scores_by_action.png", score_label='Action Score (DecisionLogic)')
-    draw_graphs.score_over_time(results, THRESHOLD, output_dir / "score_over_time.png")
-    draw_graphs.holdstill_vs_interactive(action_metrics, output_dir / "holdstill_vs_interactive.png")
-    draw_graphs.action_weight_justification(action_metrics, ACTION_WEIGHTS, output_dir / "action_weight_justification.png")
-    draw_graphs.latency_distribution(results, output_dir / "latency_distribution.png")
-    draw_graphs.time_to_decision(results, output_dir / "time_to_decision.png")
-    draw_graphs.time_to_complete_per_action(results, output_dir / "time_to_complete_per_action.png")
-    draw_graphs.identity_score_over_time(results, output_dir / "identity_score_over_time.png")
+    draw_graphs.metrics_summary(metrics, roc_auc, eer, output_dir / "53_metrics_summary.png")
+    draw_graphs.confusion_matrix(metrics, output_dir / "54_confusion_matrix.png")
+    draw_graphs.scores_by_category(action_metrics, output_dir / "55a_scores_by_category.png", category_labels=CATEGORY_LABELS)
+    #draw_graphs.scores_by_category(action_metrics_spatial, output_dir / "55b_spatial_avg_by_category.png", score_label='Average Score', title='Average Score by Category', category_labels=CATEGORY_LABELS)
+    draw_graphs.scores_by_action(action_metrics, output_dir / "56a_scores_by_action_single.png", complex_only=False)
+    draw_graphs.scores_by_action(action_metrics, output_dir / "56b_scores_by_action_complex.png", complex_only=True)
+    draw_graphs.scores_by_dfm(results, output_dir / "57a_scores_by_dfm.png")
+    draw_graphs.scores_by_ff(results, output_dir / "57b_scores_by_ff.png")
+    draw_graphs.category_accuracy(category_metrics, CATEGORY_ORDER, CATEGORY_LABELS, output_dir / "58_accuracy_by_category.png")
+    draw_graphs.score_distribution(results, THRESHOLD, output_dir / "59_score_distribution.png")
+    draw_graphs.roc_curve_overlay(compute_subsystem_roc(results), output_dir / "5A_roc_curve.png")
 
 
 if __name__ == '__main__':
@@ -450,10 +453,11 @@ if __name__ == '__main__':
 
     metrics = calculate_metrics(results)
     action_metrics = calculate_action_metrics(results)
+    action_metrics_spatial = _group_metrics_direct(results, group_by='action', score_field='spatial_avg')
     category_metrics = calculate_category_metrics(results)
     analyzer_metrics = calculate_analyzer_metrics(results)
     generator_metrics = calculate_per_generator_metrics(results)
-    fpr, tpr, roc_auc = compute_roc(results)
+    _, _, roc_auc = compute_roc(results)
     eer = compute_eer(results)
 
     print_report(metrics, action_metrics, category_metrics, analyzer_metrics, results, roc_auc, eer, generator_metrics)
@@ -462,4 +466,4 @@ if __name__ == '__main__':
         out = Path(__file__).parent / "results"
         export_csv(results, out / "analysis_results.csv")
         export_action_csv(action_metrics, out / "action_results.csv")
-        generate_graphs(results, metrics, action_metrics, category_metrics, analyzer_metrics, fpr, tpr, roc_auc, eer, out)
+        generate_graphs(results, metrics, action_metrics, action_metrics_spatial, category_metrics, analyzer_metrics, roc_auc, eer, out)

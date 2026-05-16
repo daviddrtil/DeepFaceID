@@ -163,17 +163,16 @@ def rank(cache, subject_emb, subject_gender, kind):
 
 def _enrich_row(r, kind):
     meta = (DFM_IDENTITIES if kind == 'dfm' else SOURCE_IDENTITIES).get(r['label'], {})
-    name = meta.get('name', r['label'])
     age = age_today(meta.get('birth_year')) if kind == 'dfm' else None
-    return name, age
+    return r['label'], age
 
 
 def _table(rows, kind):
-    out = ["| Rank | File | Identity | Cosine | Category | Gender | Age |", "|---|---|---|---|---|---|---|"]
+    out = ["| Rank | Model | Cosine | Category | Gender | Age |", "|---|---|---|---|---|---|"]
     for i, r in enumerate(rows, 1):
         name, age = _enrich_row(r, kind)
         age_str = '?' if age is None else age
-        out.append(f"| {i} | `{r['label']}` | {name} | {r['sim']:.4f} | {categorize(r['sim'])} | {GENDER_LABEL.get(r['gender'], '?')} | {age_str} |")
+        out.append(f"| {i} | `{name}` | {r['sim']:.4f} | {categorize(r['sim'])} | {GENDER_LABEL.get(r['gender'], '?')} | {age_str} |")
     return "\n".join(out)
 
 

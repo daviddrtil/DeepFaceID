@@ -2,26 +2,32 @@
 
 ## DFM swap models — male
 
-|   |   |   |   |
-| --- | --- | --- | --- |
-| <img src="previews/Viggo_Mortinnsen_384.jpg" width="200"/><br/>**Viggo Mortensen**<br/>male, age 68<br/><sub>`Viggo_Mortinnsen_384.dfm`</sub> | <img src="previews/Kim_Jarrey.jpg" width="200"/><br/>**Jim Carrey**<br/>male, age 64<br/><sub>`Kim_Jarrey.dfm`</sub> | <img src="previews/Tim_Chrys.jpg" width="200"/><br/>**Tom Cruise**<br/>male, age 64<br/><sub>`Tim_Chrys.dfm`</sub> | <img src="previews/Keanu_Reeves.jpg" width="200"/><br/>**Keanu Reeves**<br/>male, age 62<br/><sub>`Keanu_Reeves.dfm`</sub> |
-| <img src="previews/Rob_Doe.jpg" width="200"/><br/>**Robert Downey Jr.**<br/>male, age 61<br/><sub>`Rob_Doe.dfm`</sub> | <img src="previews/Daniel_Radcliffe_224.jpg" width="200"/><br/>**Daniel Radcliffe**<br/>male, age 37<br/><sub>`Daniel_Radcliffe_224.dfm`</sub> |  |  |
+|   |   |
+| --- | --- |
+| <img src="previews/Bryan_Greynolds.png" width="200"/><br/>**Bryan_Greynolds** **(dfm1)**<br/>male | <img src="previews/Tim_Norland.png" width="200"/><br/>**Tim_Norland** **(dfm2)**<br/>male |
+| <img src="previews/Dean_Wiesel.png" width="200"/><br/>**Dean_Wiesel** **(dfm3)**<br/>male | <img src="previews/Ewon_Spice.png" width="200"/><br/>**Ewon_Spice** **(dfm4)**<br/>male |
+| <img src="previews/Tim_Chrys.jpg" width="200"/><br/>**Tim_Chrys** **(dfm5)**<br/>male, age 64 | <img src="previews/Daniel_Radcliffe_224.jpg" width="200"/><br/>**Daniel_Radcliffe** **(dfm6)**<br/>male, age 37 |
 
 ## DFM swap models — female
 
-|   |   |   |   |
-| --- | --- | --- | --- |
-| <img src="previews/Alice_Eve_320.jpg" width="200"/><br/>**Alice Eve**<br/>female, age 44<br/><sub>`Alice_Eve_320.dfm`</sub> | <img src="previews/Melissa_Benoist_224.jpg" width="200"/><br/>**Melissa Benoist**<br/>female, age 38<br/><sub>`Melissa_Benoist_224.dfm`</sub> | <img src="previews/Jennifer_Lawrence_448.jpg" width="200"/><br/>**Jennifer Lawrence**<br/>female, age 36<br/><sub>`Jennifer_Lawrence_448.dfm`</sub> | <img src="previews/Emma_Roberts_224.jpg" width="200"/><br/>**Emma Roberts**<br/>female, age 35<br/><sub>`Emma_Roberts_224.dfm`</sub> |
-| <img src="previews/IU_asian_224.jpg" width="200"/><br/>**Lee Ji-eun**<br/>female, age 33<br/><sub>`IU_asian_224.dfm`</sub> | <img src="previews/Love_Quinn_224.jpg" width="200"/><br/>**Love Quinn**<br/>female, age 31<br/><sub>`Love_Quinn_224.dfm`</sub> | <img src="previews/Brett_Cooper_224.jpg" width="200"/><br/>**Brett Cooper**<br/>female, age 25<br/><sub>`Brett_Cooper_224.dfm`</sub> |  |
+|   |   |
+| --- | --- |
+| <img src="previews/Emily_Winston.png" width="200"/><br/>**Emily_Winston** **(dfm11)**<br/>female | <img src="previews/Millie_Park.png" width="200"/><br/>**Millie_Park** **(dfm12)**<br/>female |
+| <img src="previews/Matilda_Bobbie.png" width="200"/><br/>**Matilda_Bobbie** **(dfm13)**<br/>female | <img src="previews/Natasha_Former.png" width="200"/><br/>**Natasha_Former** **(dfm14)**<br/>female |
+| <img src="previews/Albica_Johns.png" width="200"/><br/>**Albica_Johns** **(dfm15)**<br/>female | <img src="previews/Natalie_Fatman.png" width="200"/><br/>**Natalie_Fatman** **(dfm16)**<br/>female |
 
-## Source images
+## FF identities — male
 
-|   |   |   |   |
-| --- | --- | --- | --- |
-| <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/asian_guy.jpg" width="200"/><br/><sub>asian_guy.jpg</sub> | <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/asian_guy2.jpg" width="200"/><br/><sub>asian_guy2.jpg</sub> | <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/asian_guy3.jpg" width="200"/><br/><sub>asian_guy3.jpg</sub> | <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/asian_guy4.jpg" width="200"/><br/><sub>asian_guy4.jpg</sub> |
-| <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/asian_guy5.jpg" width="200"/><br/><sub>asian_guy5.jpg</sub> | <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/asian_guy6.jpg" width="200"/><br/><sub>asian_guy6.jpg</sub> | <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/asian_guy7.jpg" width="200"/><br/><sub>asian_guy7.jpg</sub> | <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/asian_guy8.jpg" width="200"/><br/><sub>asian_guy8.jpg</sub> |
-| <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/Biden.png" width="200"/><br/><sub>Biden.png</sub> | <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/Elon_Musk.png" width="200"/><br/><sub>Elon_Musk.png</sub> | <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/Elon_Musk_blue_bg.png" width="200"/><br/><sub>Elon_Musk_blue_bg.png</sub> | <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/firc.jpg" width="200"/><br/><sub>firc.jpg</sub> |
-| <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/Kim Chen Yin.png" width="200"/><br/><sub>Kim Chen Yin.png</sub> | <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/Lukashenko.png" width="200"/><br/><sub>Lukashenko.png</sub> | <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/Putin.png" width="200"/><br/><sub>Putin.png</sub> | <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/Putin2.png" width="200"/><br/><sub>Putin2.png</sub> |
-| <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/rdj.jpg" width="200"/><br/><sub>rdj.jpg</sub> | <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/ted_mosby.jpg" width="200"/><br/><sub>ted_mosby.jpg</sub> | <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/ted_mosby.png" width="200"/><br/><sub>ted_mosby.png</sub> | <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/ted_mosby1.jpg" width="200"/><br/><sub>ted_mosby1.jpg</sub> |
-| <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/ted_mosby1_1.jpg" width="200"/><br/><sub>ted_mosby1_1.jpg</sub> | <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/ted_mosby2.jpg" width="200"/><br/><sub>ted_mosby2.jpg</sub> | <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/ted_mosby3.jpg" width="200"/><br/><sub>ted_mosby3.jpg</sub> | <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/ted_mosby4.jpg" width="200"/><br/><sub>ted_mosby4.jpg</sub> |
-| <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/ted_mosby5.jpg" width="200"/><br/><sub>ted_mosby5.jpg</sub> | <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/ted_mosby6.jpg" width="200"/><br/><sub>ted_mosby6.jpg</sub> | <img src="C:/Users/daviddrtil/docs/repos/DeepFaceID/src/identity/tools/sources/tom_cruise.webp" width="200"/><br/><sub>tom_cruise.webp</sub> |  |
+|   |   |
+| --- | --- |
+| <img src="sources/Tom_Holland1.jpg" width="200"/><br/>**Tom_Holland** **(ff1)**<br/>male | <img src="sources/Ted_Mosby1.jpg" width="200"/><br/>**Ted_Mosby** **(ff2)**<br/>male |
+| <img src="sources/Elon_Musk1.png" width="200"/><br/>**Elon_Musk** **(ff3)**<br/>male | <img src="sources/Vin_Diesel1.jpg" width="200"/><br/>**Vin_Diesel** **(ff4)**<br/>male |
+| <img src="sources/Tom_Cruise1.jpg" width="200"/><br/>**Tom_Cruise** **(ff5)**<br/>male | <img src="sources/Neil_Patrick_Harris1.jpg" width="200"/><br/>**Neil_Patrick_Harris** **(ff6)**<br/>male |
+
+## FF identities — female
+
+|   |   |
+| --- | --- |
+| <img src="sources/Kristyna_Leichtova1.jpg" width="200"/><br/>**Kristyna_Leichtova** **(ff11)**<br/>female | <img src="sources/Emilia_Clarke1.jpg" width="200"/><br/>**Emilia_Clarke** **(ff12)**<br/>female |
+| <img src="sources/Jennifer_Lawrence1.jpg" width="200"/><br/>**Jennifer_Lawrence** **(ff13)**<br/>female | <img src="sources/Sydney_Sweeney1.jpg" width="200"/><br/>**Sydney_Sweeney** **(ff14)**<br/>female |
+| <img src="sources/Natalie_Portman1.jpg" width="200"/><br/>**Natalie_Portman** **(ff15)**<br/>female | <img src="sources/Emma_Roberts1.jpg" width="200"/><br/>**Emma_Roberts** **(ff16)**<br/>female |
